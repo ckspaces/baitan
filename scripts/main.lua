@@ -507,8 +507,8 @@ function HandleAction(actionType, data)
         return
     end
 
-    -- === 摆摊中拦截：除了叫卖和等待观望，其他消耗回合的行动都不允许 ===
-    if gs.isStalling and actionType ~= "hawk_sell" and actionType ~= "wait_observe" then
+    -- === 摆摊中拦截：除了叫卖，其他消耗回合的行动都不允许 ===
+    if gs.isStalling and actionType ~= "hawk_sell" then
         gs.addMessage("正在营业中！先收摊才能做其他事", "warning")
         UIManager.refresh(gs, config, { onAction = HandleAction })
         return
@@ -558,28 +558,6 @@ function HandleAction(actionType, data)
             end)
         end
         return  -- 异步处理，提前返回
-    elseif actionType == "wait_observe" then
-        -- 等待观望（不弹小游戏，直接执行；摆摊期间不推进天数）
-        success = StallSystem.waitObserve(gs, config)
-        if success then
-            EventSystem.rollEvent(gs, config)
-            StallSystem.tickPromotion(gs, config)
-            SaveSystem.save()
-            UpdateBGM()
-            if gs.phase ~= "playing" then
-                ShowEndScreen()
-            end
-        end
-        UIManager.refresh(gs, config, { onAction = HandleAction })
-        -- 检查城管对话弹窗
-        if gs.pendingChengguan and gs.phase == "playing" then
-            ShowChengguanDialogue()
-        end
-        -- 检查微信事件弹窗
-        if gs.pendingWechatEvent and gs.phase == "playing" then
-            ShowWechatEventPopup(gs.pendingWechatEvent)
-        end
-        return
     elseif actionType == "rest" then
         success = PlayerSystem.rest(gs, config)
         if success then gs.currentScene = "rest" end

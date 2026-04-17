@@ -475,52 +475,30 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
         }
     end
 
-    -- === 当前地点信息 + 时段进度 ===
+    -- === 当前地点信息 ===
     local curLoc = gs.getCurrentLocation(config)
     if curLoc then
-        local maxSlots = curLoc.maxSlots or 5
-        local usedSlots = gs.stallTimeSlot or 0
-        local previewSlot = usedSlots + 1
-        local displaySlot = math.min(maxSlots, previewSlot)
-        local slotPct = math.min(1.0, displaySlot / maxSlots)
-        local isOverSlot = previewSlot > maxSlots
-        local isTailSlot = previewSlot == maxSlots
-        local slotColor = isOverSlot and colors.DANGER
-            or (isTailSlot and colors.WARNING or colors.ACCENT)
-        local slotTip = isOverSlot and "⚠️ 下一轮已过营业高峰，客流会明显下降！"
-            or (isTailSlot and "⚠️ 下一轮是最后黄金时段，客流开始回落。" or "")
+        local t = gs.timeOfDayMinutes or 0
+        local timeHint
+        if t < 900 then timeHint = "上午旺时 🔥"
+        elseif t < 1080 then timeHint = "下午客流稳定"
+        elseif t < 1170 then timeHint = "傍晚客流回落 📉"
+        else timeHint = "夜晚人少了 🌙"
+        end
 
         children[#children + 1] = UI.Panel {
             width = "100%", padding = 6, backgroundColor = { 25, 28, 45, 180 }, borderRadius = 5,
-            flexDirection = "column", gap = 3,
+            flexDirection = "row", justifyContent = "space-between", alignItems = "center",
             children = {
-                UI.Panel {
-                    width = "100%", flexDirection = "row", justifyContent = "space-between",
-                    alignItems = "center",
-                    children = {
-                        UI.Label {
-                            text = string.format("📍 %s%s", curLoc.emoji, curLoc.name),
-                            fontSize = 9, fontColor = colors.ACCENT,
-                        },
-                        UI.Label {
-                            text = string.format("⏰ 时段 %d/%d", displaySlot, maxSlots),
-                            fontSize = 9, fontColor = slotColor,
-                        },
-                    },
+                UI.Label {
+                    text = string.format("📍 %s%s%s", curLoc.emoji, curLoc.name,
+                        curLoc.rentCost > 0 and string.format("  摊位费$%d", curLoc.rentCost) or ""),
+                    fontSize = 9, fontColor = colors.ACCENT,
                 },
-                UI.ProgressBar {
-                    value = slotPct,
-                    width = "100%", height = 4, borderRadius = 2,
-                    fillColor = slotColor,
+                UI.Label {
+                    text = timeHint,
+                    fontSize = 8, fontColor = colors.TEXT_DIM,
                 },
-                (slotTip ~= "") and UI.Label {
-                    text = slotTip,
-                    fontSize = 8, fontColor = colors.DANGER, textAlign = "center",
-                } or nil,
-                curLoc.rentCost > 0 and UI.Label {
-                    text = string.format("摊位费$%d", curLoc.rentCost),
-                    fontSize = 8, fontColor = colors.TEXT_DIM, textAlign = "center",
-                } or nil,
             },
         }
     end
@@ -678,7 +656,6 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
         actualHawkCost = math.floor(item.energyCost * (config.Health.SICK_ENERGY_PENALTY or 1.5))
     end
     local canHawk = gs.stallInventory > 0 and gs.energy >= actualHawkCost
-    local canWait = gs.stallInventory > 0
     children[#children + 1] = UI.Panel {
         width = "100%", flexDirection = "column", gap = 4, marginTop = 4,
         children = {
@@ -689,15 +666,6 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
                 disabled = not canHawk,
                 onClick = function(self)
                     if callbacks.onAction then callbacks.onAction("hawk_sell", {}) end
-                end,
-            },
-            UI.Button {
-                text = string.format("⏳ 等待观望（体力-%d·接待自然来客/回头客）", T.WAIT_ENERGY_COST),
-                width = "100%", fontSize = 11, height = 34,
-                variant = canWait and (canHawk and "ghost" or "warning") or "ghost",
-                disabled = not canWait,
-                onClick = function(self)
-                    if callbacks.onAction then callbacks.onAction("wait_observe", {}) end
                 end,
             },
             UI.Panel {
@@ -724,10 +692,10 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
     }
 
     -- 提示
-    local tipText = not canHawk and canWait
-        and "💡 叫卖负责短时爆发，等待负责承接自然客流，直播负责把经营热度放大成粉丝和订单。"
+    local tipText = not canHawk
+        and "💡 体力不足时自然来客和回头客会持续照顾生意，越晚人越少，趁早叫卖效果更好。"
         or "💡 先用叫卖拉第一波，再靠口碑、名气、地点和直播把摊位经营成自带客流的生意。"
-    local tipColor = not canHawk and canWait and { 120, 200, 255, 255 } or colors.WARNING
+    local tipColor = not canHawk and { 120, 200, 255, 255 } or colors.WARNING
     children[#children + 1] = UI.Label {
         text = tipText,
         fontSize = 9, fontColor = tipColor, textAlign = "center", marginTop = 4,
