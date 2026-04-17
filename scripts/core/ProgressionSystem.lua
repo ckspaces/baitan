@@ -41,6 +41,54 @@ function ProgressionSystem.getCurrentItems(gs, config)
     return config.StallItems
 end
 
+function ProgressionSystem.getItemProgress(gs, itemId)
+    local progress = gs.itemProgress or {}
+    return progress[itemId] or 0
+end
+
+function ProgressionSystem.getItemUnlockRequirement(index, config)
+    if index <= 1 then return 0 end
+    local R = config.RecipeProgression or {}
+    local baseXP = R.UNLOCK_XP_BASE or 16
+    local stepXP = R.UNLOCK_XP_STEP or 10
+    return baseXP + (index - 2) * stepXP
+end
+
+function ProgressionSystem.getItemUnlockStatus(gs, config, index, items)
+    items = items or ProgressionSystem.getCurrentItems(gs, config)
+    local item = items[index]
+    if not item then
+        return { unlocked = false, reason = missing }
+    end
+
+    local skillOk = gs.meetsSkillReq(item.skillReq)
+    if index == 1 then
+        return {
+            unlocked = skillOk,
+            skillOk = skillOk,
+            requiredXP = 0,
+            currentXP = 0,
+            previousItem = nil,
+        }
+    end
+
+    local previousItem = items[index - 1]
+    local requiredXP = ProgressionSystem.getItemUnlockRequirement(index, config)
+    local currentXP = previousItem and ProgressionSystem.getItemProgress(gs, previousItem.id) or 0
+
+    return {
+        unlocked = skillOk and currentXP >= requiredXP,
+        skillOk = skillOk,
+        requiredXP = requiredXP,
+        currentXP = currentXP,
+        previousItem = previousItem,
+    }
+end
+
+function ProgressionSystem.isItemUnlocked(gs, config, index, items)
+    return ProgressionSystem.getItemUnlockStatus(gs, config, index, items).unlocked
+end
+
 --- 获取当前地点的专属促销活动列表（返回空表或促销列表）
 function ProgressionSystem.getLocationPromotions(gs, config)
     local loc = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil

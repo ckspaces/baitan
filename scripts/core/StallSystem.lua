@@ -787,16 +787,21 @@ end
 
 --- 每天结算促销天数（在每个回合结束时调用）
 function StallSystem.tickPromotion(gs, config)
-    if not gs.activePromotion then return end
+    if not gs.activePromotion then
+        if gs.promotionCooldown and gs.promotionCooldown > 0 then
+            gs.promotionCooldown = gs.promotionCooldown - 1
+        end
+        return
+    end
     gs.activePromotion.remaining = gs.activePromotion.remaining - 1
     if gs.activePromotion.remaining <= 0 then
         local promo = StallSystem.getActivePromotionConfig(gs, config)
         local name = promo and (promo.emoji .. promo.name) or "促销"
         gs.addMessage(string.format("%s 活动已结束", name), "info")
         gs.activePromotion = nil
-        gs.promotionCooldown = 2  -- 冷却2天
+        gs.promotionCooldown = 2
+        return
     end
-    -- 促销冷却递减
     if gs.promotionCooldown and gs.promotionCooldown > 0 then
         gs.promotionCooldown = gs.promotionCooldown - 1
     end

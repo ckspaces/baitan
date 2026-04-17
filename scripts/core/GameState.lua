@@ -48,6 +48,7 @@ function GameState.init(config)
     -- === 主业系统（替代旧 businesses） ===
     GameState.mainBizTier = 1               -- 当前主业等级 1~4
     GameState.selectedStallItem = 1         -- 当前选品索引
+    GameState.itemProgress = {}             -- 单品制作/售卖经验 { [itemId] = xp }
     GameState.flyersActive = 0              -- 传单层数
     GameState.stallDayCount = 0             -- 累计经营天数
     GameState.stallProficiency = 0          -- 摆摊熟练度（累计经验）
@@ -70,7 +71,7 @@ function GameState.init(config)
     -- === 摆摊状态机 ===
     GameState.isStalling = false            -- 是否正在摆摊中
     GameState.stallInventory = 0            -- 当前库存份数
-    GameState.stallInventoryMax = 0         -- 本批进货总份数
+    GameState.stallInventoryMax = 0         -- 本次营业累计制作份数
     GameState.stallItemIndex = 1            -- 当前进货的商品索引（Lua 1-based）
     GameState.stallTotalSold = 0            -- 本次出摊累计已卖
     GameState.stallTotalEarned = 0          -- 本次出摊累计收入
@@ -250,6 +251,7 @@ function GameState.toSaveData()
     -- 主业
     data.mainBizTier = GameState.mainBizTier
     data.selectedStallItem = GameState.selectedStallItem
+    data.itemProgress = GameState.itemProgress
     data.flyersActive = GameState.flyersActive
     data.stallDayCount = GameState.stallDayCount
     data.stallProficiency = GameState.stallProficiency

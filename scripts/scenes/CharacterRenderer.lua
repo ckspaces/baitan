@@ -49,6 +49,8 @@ end
 --- 绘制头部
 function CharacterRenderer.drawHead(nvg, cx, cy, scale, gs, animTime)
     local headR = 18 * scale
+    local weather = gs.currentWeather or 'sunny'
+    local isSnowy = weather == 'snowy'
 
     -- 头（圆形）
     nvgBeginPath(nvg)
@@ -66,6 +68,21 @@ function CharacterRenderer.drawHead(nvg, cx, cy, scale, gs, animTime)
     nvgClosePath(nvg)
     nvgFillColor(nvg, nvgRGBA(40, 30, 25, 255))
     nvgFill(nvg)
+
+    if isSnowy then
+        nvgBeginPath(nvg)
+        nvgEllipse(nvg, cx, cy - headR * 0.85, headR * 1.05, headR * 0.32)
+        nvgFillColor(nvg, nvgRGBA(70, 90, 120, 240))
+        nvgFill(nvg)
+        nvgBeginPath(nvg)
+        nvgRoundedRect(nvg, cx - headR * 0.78, cy - headR * 1.65, headR * 1.56, headR * 0.9, headR * 0.32)
+        nvgFillColor(nvg, nvgRGBA(92, 120, 160, 245))
+        nvgFill(nvg)
+        nvgBeginPath(nvg)
+        nvgCircle(nvg, cx, cy - headR * 1.75, headR * 0.18)
+        nvgFillColor(nvg, nvgRGBA(235, 240, 250, 220))
+        nvgFill(nvg)
+    end
 
     -- 表情
     if gs.mood > 60 then
@@ -154,6 +171,16 @@ function CharacterRenderer.drawBody(nvg, cx, cy, scale, gs)
         stall     = { 220, 120, 40 },
     }
     local c = colors[gs.currentScene] or colors.office
+    local weather = gs.currentWeather or 'sunny'
+    local isSnowy = weather == 'snowy'
+
+    if isSnowy then
+        c = {
+            math.max(40, c[1] - 55),
+            math.max(50, c[2] - 35),
+            math.max(60, c[3] - 10),
+        }
+    end
 
     -- 上衣
     nvgBeginPath(nvg)
@@ -171,6 +198,21 @@ function CharacterRenderer.drawBody(nvg, cx, cy, scale, gs)
     nvgLineTo(nvg, cx + 5 * scale, cy - 35 * scale)
     nvgFillColor(nvg, nvgRGBA(240, 235, 220, 255))
     nvgFill(nvg)
+
+    if isSnowy then
+        nvgBeginPath(nvg)
+        nvgRoundedRect(nvg, cx - 17 * scale, cy - 37 * scale, 34 * scale, 42 * scale, 6 * scale)
+        nvgFillColor(nvg, nvgRGBA(c[1], c[2], c[3], 210))
+        nvgFill(nvg)
+        nvgStrokeColor(nvg, nvgRGBA(math.max(0, c[1] - 25), math.max(0, c[2] - 25), math.max(0, c[3] - 25), 220))
+        nvgStrokeWidth(nvg, 1.2 * scale)
+        nvgStroke(nvg)
+
+        nvgBeginPath(nvg)
+        nvgRoundedRect(nvg, cx - 9 * scale, cy - 33 * scale, 18 * scale, 7 * scale, 3 * scale)
+        nvgFillColor(nvg, nvgRGBA(225, 80, 70, 235))
+        nvgFill(nvg)
+    end
 end
 
 --- 绘制腿
@@ -210,6 +252,30 @@ end
 --- 绘制手臂
 function CharacterRenderer.drawArms(nvg, cx, cy, scale, gs, animTime)
     local activity = gs.currentActivity
+    local weather = gs.currentWeather or 'sunny'
+    local armWeatherFactor = (weather == 'snowy' or weather == 'rainy' or weather == 'stormy') and 0.7 or 1.0
+
+    if weather == 'rainy' or weather == 'stormy' then
+        local umbX = cx + 6 * scale
+        local umbTopY = cy - 82 * scale
+        local umbR = 24 * scale
+
+        nvgStrokeColor(nvg, nvgRGBA(90, 70, 45, 220))
+        nvgStrokeWidth(nvg, 2.0 * scale)
+        nvgBeginPath(nvg)
+        nvgMoveTo(nvg, umbX, cy - 14 * scale)
+        nvgLineTo(nvg, umbX, umbTopY)
+        nvgStroke(nvg)
+
+        nvgBeginPath(nvg)
+        nvgArc(nvg, umbX, umbTopY, umbR, math.rad(180), math.rad(360), 1)
+        nvgClosePath(nvg)
+        nvgFillColor(nvg, nvgRGBA(70, 110, 185, 220))
+        nvgFill(nvg)
+        nvgStrokeColor(nvg, nvgRGBA(40, 70, 120, 230))
+        nvgStrokeWidth(nvg, 1.2 * scale)
+        nvgStroke(nvg)
+    end
     nvgStrokeColor(nvg, nvgRGBA(255, 220, 185, 255))
     nvgStrokeWidth(nvg, 5 * scale)
     nvgLineCap(nvg, NVG_ROUND)
@@ -250,7 +316,7 @@ function CharacterRenderer.drawArms(nvg, cx, cy, scale, gs, animTime)
         nvgStroke(nvg)
     else
         -- 默认自然下垂，轻微摆动
-        local swing = math.sin(animTime * 1.5) * 3 * scale
+        local swing = math.sin(animTime * 1.5) * 3 * scale * armWeatherFactor
         nvgBeginPath(nvg)
         nvgMoveTo(nvg, cx - 14 * scale, cy - 25 * scale)
         nvgLineTo(nvg, cx - 18 * scale + swing, cy - 5 * scale)

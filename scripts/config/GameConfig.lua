@@ -313,6 +313,18 @@ GameConfig.Proficiency = {
     LEVEL_NAMES = { "新手", "学徒", "熟练", "老手", "高手", "大师", "宗师", "传奇", "神话", "烤神" },
 }
 
+-- 单品制作与顺序解锁系统
+GameConfig.RecipeProgression = {
+    XP_PER_CRAFT = 1,
+    XP_PER_SALE = 1,
+    UNLOCK_XP_BASE = 16,
+    UNLOCK_XP_STEP = 10,
+    COOK_UNITS_PER_ACTION = 4,
+    COOK_BONUS_EVERY_LEVELS = 2,
+    COOK_BONUS_UNITS = 1,
+    COOK_MAX_UNITS = 8,
+}
+
 -- 信任度与被动销售系统
 GameConfig.Trust = {
     -- 信任度增长（每次动作）

@@ -136,6 +136,7 @@ local function initPedestrians(w, h, weather)
             x = math.random() * (w or 400),
             y = 0.74 + math.random() * 0.10,
         })
+        p.weather = weather
         -- 下雨时行人带伞
         p.hasUmbrella = (weather == "rainy" or weather == "stormy") and (math.random() > 0.2)
         if p.hasUmbrella then
@@ -270,6 +271,8 @@ function StallScene.drawPerson(nvg, px, py, p, animTime, isWalking, facingDir, w
     local bH = p.bodyH or 14
     local hR = p.headR or 3.5
     local dir = facingDir or p.dir or 1
+    local weather = p.weather or 'sunny'
+    local isSnowy = weather == 'snowy'
 
     -- ★ 独立步行动画：每人用自己的 walkPhase + walkFreq
     local walkCycle = (p.walkPhase or 0) + animTime * (p.walkFreq or 6)
@@ -277,14 +280,15 @@ function StallScene.drawPerson(nvg, px, py, p, animTime, isWalking, facingDir, w
     local legSwingR = 0
     local armSwingL = 0
     local armSwingR = 0
+    local weatherArmFactor = isSnowy and 0.65 or 1.0
 
     if isWalking then
         -- 左腿 sin，右腿 -sin（交替）
         legSwingL = math.sin(walkCycle) * 4.0 * sc
         legSwingR = math.sin(walkCycle + math.pi) * 4.0 * sc
         -- 手臂与对侧腿同步（左手配右腿，右手配左腿）
-        armSwingL = math.sin(walkCycle + math.pi) * 3.5 * sc    -- 与右腿同步
-        armSwingR = math.sin(walkCycle) * 3.5 * sc               -- 与左腿同步
+        armSwingL = math.sin(walkCycle + math.pi) * 3.5 * sc * weatherArmFactor    -- 与右腿同步
+        armSwingR = math.sin(walkCycle) * 3.5 * sc * weatherArmFactor               -- 与左腿同步
     end
 
     local legLen = 8 * sc
@@ -379,6 +383,22 @@ function StallScene.drawPerson(nvg, px, py, p, animTime, isWalking, facingDir, w
         nvgFill(nvg)
     end
 
+    if isSnowy then
+        nvgBeginPath(nvg)
+        nvgRoundedRect(nvg, px - bodyW * 0.68, py - bH - 1.2 * sc, bodyW * 1.36, bH * 1.08, 3.5 * sc)
+        nvgFillColor(nvg, nvgRGBA(
+            math.max(30, a.clothes[1] - 35),
+            math.max(30, a.clothes[2] - 20),
+            math.max(40, a.clothes[3] - 10),
+            210))
+        nvgFill(nvg)
+
+        nvgBeginPath(nvg)
+        nvgRoundedRect(nvg, px - bodyW * 0.42, py - bH * 0.92, bodyW * 0.84, 2.2 * sc, 1.2 * sc)
+        nvgFillColor(nvg, nvgRGBA(225, 90, 80, 220))
+        nvgFill(nvg)
+    end
+
     -- ★ 手臂（与对侧腿交替摆动）
     local armY = py - bH * 0.75
     local armLen = bH * 0.55
@@ -457,6 +477,17 @@ function StallScene.drawPerson(nvg, px, py, p, animTime, isWalking, facingDir, w
         nvgBeginPath(nvg)
         nvgRoundedRect(nvg, px - hR * 0.9, headY - hR * 1.5, hR * 1.8, hR * 1.0, hR * 0.4)
         nvgFillColor(nvg, nvgRGBA(hc[1], hc[2], hc[3], 240))
+        nvgFill(nvg)
+    end
+
+    if isSnowy then
+        nvgBeginPath(nvg)
+        nvgEllipse(nvg, px, headY - hR * 0.7, hR * 1.5, hR * 0.32)
+        nvgFillColor(nvg, nvgRGBA(80, 105, 140, 235))
+        nvgFill(nvg)
+        nvgBeginPath(nvg)
+        nvgRoundedRect(nvg, px - hR * 0.78, headY - hR * 1.45, hR * 1.56, hR * 0.78, hR * 0.3)
+        nvgFillColor(nvg, nvgRGBA(100, 130, 175, 240))
         nvgFill(nvg)
     end
 
