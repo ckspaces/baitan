@@ -12,6 +12,7 @@ GameConfig.Game = {
     INITIAL_DEBT = 500000,        -- 50万启动贷款
     INITIAL_CASH = 5000,          -- 启动资金5千
     MONTHLY_LIVING_COST = 1500,   -- 基本生活费
+    WIN_FAME = 5000,              -- 达到此名气值即成为网红，赢得游戏
 }
 
 -- 财务
@@ -84,33 +85,6 @@ GameConfig.MainBusinessTiers = {
         passiveIncome = nil,     -- 纯靠手动操作
         scene = "stall",
         unlockReq = { month = 1 },
-    },
-    {
-        id = "dapaidang", name = "大排档", emoji = "🍻",
-        tier = 2,
-        upgradeCost = 20000,
-        monthlyOverhead = 3000,  -- 月租+人工
-        passiveIncome = { 2000, 5000 },
-        scene = "dapaidang",
-        unlockReq = { month = 4, skills = { management = 1 }, stallDays = 12, reputation = 10 },
-    },
-    {
-        id = "restaurant", name = "餐饮店", emoji = "🍜",
-        tier = 3,
-        upgradeCost = 100000,
-        monthlyOverhead = 8000,
-        passiveIncome = { 10000, 25000 },
-        scene = "shop",
-        unlockReq = { month = 10, skills = { management = 2, marketing = 1 }, reputation = 30 },
-    },
-    {
-        id = "hotel", name = "大酒店", emoji = "🏨",
-        tier = 4,
-        upgradeCost = 500000,
-        monthlyOverhead = 30000,
-        passiveIncome = { 50000, 120000 },
-        scene = "hotel",
-        unlockReq = { month = 20, skills = { management = 4, charm = 3, negotiation = 2, marketing = 2 }, reputation = 80 },
     },
 }
 
@@ -187,48 +161,6 @@ GameConfig.LocationItems = {
           batchCost = 50,  yield = 20, unitPrice = 15, salesRange = { 12, 22 },
           energyCost = 7,  moodCost = 2,  unlockMonth = 5, unlockDay = 0, skillReq = {} },
     },
-}
-
--- Tier 2: 大排档
-GameConfig.DapaidangItems = {
-    { id = "hotpot",    name = "麻辣烫",     emoji = "🍲",
-      batchCost = 200,  yield = 20, unitPrice = 25, salesRange = { 10, 20 },
-      energyCost = 8,   moodCost = 2,  unlockMonth = 1, skillReq = {} },
-    { id = "bbq_set",   name = "烧烤套餐",   emoji = "🍖",
-      batchCost = 300,  yield = 15, unitPrice = 40, salesRange = { 8, 15 },
-      energyCost = 8,   moodCost = 2,  unlockMonth = 1, skillReq = {} },
-    { id = "beer_set",  name = "啤酒小龙虾", emoji = "🦞",
-      batchCost = 400,  yield = 12, unitPrice = 55, salesRange = { 6, 12 },
-      energyCost = 7,   moodCost = 2,  unlockMonth = 1, skillReq = {} },
-    { id = "stir_fry",  name = "大排档炒菜", emoji = "🥘",
-      batchCost = 250,  yield = 18, unitPrice = 35, salesRange = { 10, 18 },
-      energyCost = 9,   moodCost = 2,  unlockMonth = 1, skillReq = { management = 1 } },
-}
-
--- Tier 3: 餐饮店
-GameConfig.RestaurantItems = {
-    { id = "set_meal",  name = "商务套餐",   emoji = "🍱",
-      batchCost = 500,  yield = 20, unitPrice = 58,  salesRange = { 12, 20 },
-      energyCost = 8,   moodCost = 2,  unlockMonth = 1, skillReq = {} },
-    { id = "hot_pot",   name = "火锅套餐",   emoji = "🫕",
-      batchCost = 800,  yield = 10, unitPrice = 98,  salesRange = { 6, 10 },
-      energyCost = 9,   moodCost = 2,  unlockMonth = 1, skillReq = {} },
-    { id = "seafood",   name = "海鲜拼盘",   emoji = "🦐",
-      batchCost = 1200, yield = 8,  unitPrice = 168, salesRange = { 4, 8 },
-      energyCost = 10,  moodCost = 3,  unlockMonth = 1, skillReq = { management = 2 } },
-}
-
--- Tier 4: 大酒店
-GameConfig.HotelItems = {
-    { id = "banquet_a",   name = "标准宴席", emoji = "🍽️",
-      batchCost = 3000,  yield = 30, unitPrice = 288, salesRange = { 15, 30 },
-      energyCost = 10,   moodCost = 3,  unlockMonth = 1, skillReq = {} },
-    { id = "banquet_b",   name = "豪华宴席", emoji = "🥂",
-      batchCost = 5000,  yield = 20, unitPrice = 488, salesRange = { 10, 20 },
-      energyCost = 12,   moodCost = 3,  unlockMonth = 1, skillReq = { management = 3 } },
-    { id = "banquet_vip", name = "VIP包间",  emoji = "👑",
-      batchCost = 8000,  yield = 10, unitPrice = 888, salesRange = { 5, 10 },
-      energyCost = 12,   moodCost = 3,  unlockMonth = 1, skillReq = { management = 4, charm = 3 } },
 }
 
 -- 摆摊事件（所有tier通用）

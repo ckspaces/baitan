@@ -218,12 +218,13 @@ function TimeSystem.endOfMonth(gs, config)
     gs.year = math.floor((gs.currentMonth - 1) / 12) + 1
 
     -- 14. 胜负判定
-    if gs.totalDebt <= 0 then
+    local winFame = config.Game.WIN_FAME or 5000
+    if (gs.fame or 0) >= winFame then
         gs.phase = "won"
-        gs.addMessage("恭喜！你还清了所有贷款！", "success")
+        gs.addMessage("🎉 恭喜！你成为了美食网红！粉丝们都在追你！", "success")
     elseif gs.currentMonth > config.Game.TOTAL_MONTHS then
         gs.phase = "lost"
-        gs.addMessage("时间到了...你没能还清贷款", "danger")
+        gs.addMessage("时间到了，没能成为网红...继续努力吧！", "danger")
     elseif gs.cash < -50000 then
         gs.phase = "lost"
         gs.addMessage("资不抵债，破产了...", "danger")

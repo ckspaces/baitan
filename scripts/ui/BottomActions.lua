@@ -233,37 +233,57 @@ function BottomActions.buildPreStallView(gs, config, colors, callbacks)
         }
     end
 
-    -- 升级提示（如果有下一级）
-    local nextTier = ProgressionSystem.getNextTier(gs, config)
-    if nextTier then
-        local canUpgrade, reason = ProgressionSystem.canUpgrade(gs, config)
-        children[#children + 1] = UI.Panel {
-            width = "100%", marginTop = 6, padding = 6,
-            backgroundColor = { 30, 28, 15, 200 }, borderRadius = 6,
-            borderWidth = 1, borderColor = canUpgrade and colors.GOLD or colors.BORDER,
-            flexDirection = "column", gap = 3, alignItems = "center",
-            children = {
-                UI.Label {
-                    text = string.format("升级为 %s%s", nextTier.emoji, nextTier.name),
-                    fontSize = 11, fontColor = colors.GOLD,
-                },
-                UI.Label {
-                    text = canUpgrade and string.format("费用: $%s", gs.formatMoney(nextTier.upgradeCost))
-                        or reason,
-                    fontSize = 9, fontColor = canUpgrade and colors.SUCCESS or colors.TEXT_DIM,
-                },
-                UI.Button {
-                    text = canUpgrade and "立即升级" or "条件不足",
-                    fontSize = 10, height = 28, width = 120,
-                    variant = canUpgrade and "primary" or "ghost",
-                    disabled = not canUpgrade,
-                    onClick = function(self)
-                        if callbacks.onAction then callbacks.onAction("upgrade_tier", {}) end
-                    end,
+    -- 网红成长之路（名气进度条）
+    local fame = gs.fame or 0
+    local winFame = (config.Game and config.Game.WIN_FAME) or 5000
+    local fameLevels = config.Fame and config.Fame.LEVELS or {}
+    -- 找当前名气等级和下一等级
+    local currentLvl = fameLevels[1] or { name = "无人知晓", emoji = "😶" }
+    local nextLvl = nil
+    for i = #fameLevels, 1, -1 do
+        if fame >= fameLevels[i].threshold then
+            currentLvl = fameLevels[i]
+            nextLvl = fameLevels[i + 1]
+            break
+        end
+    end
+    local fameProgress = math.min(1.0, fame / winFame)
+    local fameColor = fame >= winFame and colors.GOLD
+        or fame >= 2000 and { 255, 120, 50, 255 }
+        or fame >= 800 and { 255, 200, 50, 255 }
+        or colors.ACCENT
+    local nextDesc = nextLvl
+        and string.format("距 %s%s 还差 %d 名气", nextLvl.emoji, nextLvl.name, nextLvl.threshold - fame)
+        or "🎉 已达最高等级！"
+    children[#children + 1] = UI.Panel {
+        width = "100%", marginTop = 6, padding = 6,
+        backgroundColor = { 15, 20, 40, 220 }, borderRadius = 6,
+        borderWidth = 1, borderColor = fameColor,
+        flexDirection = "column", gap = 4,
+        children = {
+            UI.Panel {
+                width = "100%", flexDirection = "row", justifyContent = "space-between", alignItems = "center",
+                children = {
+                    UI.Label {
+                        text = string.format("🌟 网红成长之路"),
+                        fontSize = 10, fontColor = fameColor,
+                    },
+                    UI.Label {
+                        text = string.format("%s%s  %d / %d", currentLvl.emoji, currentLvl.name, fame, winFame),
+                        fontSize = 9, fontColor = colors.TEXT_WHITE,
+                    },
                 },
             },
-        }
-    end
+            UI.ProgressBar {
+                value = fameProgress,
+                width = "100%", height = 8, borderRadius = 4, fillColor = fameColor,
+            },
+            UI.Label {
+                text = nextDesc,
+                fontSize = 9, fontColor = colors.TEXT_DIM, textAlign = "center",
+            },
+        },
+    }
 
     return UI.Panel {
         id = "mainTab",

@@ -27,8 +27,6 @@ local FishingMiniGame = require("ui.FishingMiniGame")
 local ShopScene = require("scenes.ShopScene")
 local RestScene = require("scenes.RestScene")
 local StallScene = require("scenes.StallScene")
-local DapaidangScene = require("scenes.DapaidangScene")
-local HotelScene = require("scenes.HotelScene")
 local PharmacyScene = require("scenes.PharmacyScene")
 local SupermarketScene = require("scenes.SupermarketScene")
 local FishingScene    = require("scenes.FishingScene")
@@ -36,8 +34,6 @@ local FishingScene    = require("scenes.FishingScene")
 SceneRenderer.register("shop", ShopScene)
 SceneRenderer.register("rest", RestScene)
 SceneRenderer.register("stall", StallScene)
-SceneRenderer.register("dapaidang", DapaidangScene)
-SceneRenderer.register("hotel", HotelScene)
 SceneRenderer.register("pharmacy", PharmacyScene)
 SceneRenderer.register("supermarket", SupermarketScene)
 SceneRenderer.register("fishing",     FishingScene)
@@ -482,14 +478,6 @@ function HandleAction(actionType, data)
         return
     elseif actionType == "toggle_livestream" then
         StallSystem.toggleLiveStream(gs, config)
-        UIManager.refresh(gs, config, { onAction = HandleAction })
-        return
-    elseif actionType == "upgrade_tier" then
-        success = ProgressionSystem.upgrade(gs, config)
-        if success then
-            AudioManager.playSFX("audio/sfx/sfx_cash_register.ogg", 0.8)
-            UpdateBGM()
-        end
         UIManager.refresh(gs, config, { onAction = HandleAction })
         return
     elseif actionType == "edit_banner" then
@@ -1517,16 +1505,23 @@ end
 
 function ShowEndScreen()
     local isWin = gs.phase == "won"
-    local title = isWin and "恭喜通关！" or "游戏结束"
+    local title = isWin and "🎉 成为网红啦！" or "游戏结束"
 
-    local tierDef = ProgressionSystem.getCurrentTier(gs, config)
-    local tierName = tierDef and (tierDef.emoji .. tierDef.name) or "街边摆摊"
+    local fame = gs.fame or 0
+    local fameLevels = config.Fame and config.Fame.LEVELS or {}
+    local fameName = "无人知晓"
+    for i = #fameLevels, 1, -1 do
+        if fame >= fameLevels[i].threshold then
+            fameName = fameLevels[i].emoji .. fameLevels[i].name
+            break
+        end
+    end
 
     local desc = isWin
-        and string.format("你用了%d个月完成了逆袭！\n最终产业: %s\n最终资产: $%s",
-            gs.currentMonth - 1, tierName, gs.formatMoney(gs.cash))
-        or string.format("很遗憾，你没能在5年内还清贷款\n当前产业: %s\n剩余贷款: $%s\n现金: $%s",
-            tierName, gs.formatMoney(gs.totalDebt), gs.formatMoney(gs.cash))
+        and string.format("你用了%d个月成为了美食网红！\n最终名气: %d  (%s)\n现金: $%s",
+            gs.currentMonth - 1, fame, fameName, gs.formatMoney(gs.cash))
+        or string.format("很遗憾，没能在5年内成为网红\n最终名气: %d  (%s)\n现金: $%s",
+            fame, fameName, gs.formatMoney(gs.cash))
 
     local overlay = UI.Panel {
         id = "endOverlay",
@@ -1592,7 +1587,7 @@ function RestartGame()
 
     -- 重新初始化状态
     gs.init(config)
-    gs.addMessage("新的开始！这次一定要还清贷款！", "info")
+    gs.addMessage("新的开始！这次一定要成为网红！", "info")
 
     -- 重建 UI
     UIManager.build(gs, config, SceneRenderer, {
