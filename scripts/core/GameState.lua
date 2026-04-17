@@ -14,6 +14,7 @@ function GameState.init(config)
     GameState.currentDay = 1
     GameState.year = 1
     GameState.monthInYear = 1
+    GameState.timeOfDayMinutes = 9 * 60
 
     -- 财务
     GameState.cash = C.INITIAL_CASH
@@ -23,6 +24,7 @@ function GameState.init(config)
     GameState.totalRepaid = 0
     GameState.monthIncome = 0
     GameState.monthExpense = 0
+    GameState.cashLedger = {}
 
     -- 角色属性
     GameState.energy = P.MAX_ENERGY
@@ -56,6 +58,18 @@ function GameState.init(config)
     GameState.stallTrust = 0                -- 信任度/口碑（0~100，跨出摊保留）
     GameState.stallPassiveSold = 0          -- 本回合被动卖出量（用于UI显示）
     GameState.stallPassiveEarned = 0        -- 本回合被动收入（用于UI显示）
+    GameState.stallSessionRevenue = 0
+    GameState.stallSessionCosts = 0
+    GameState.stallSessionNet = 0
+    GameState.stallSessionStartCash = GameState.cash
+    GameState.stallSessionStartMinute = 0
+    GameState.stallSessionEndMinute = 0
+    GameState.stallActionMode = 'balanced'
+    GameState.stallActionModeUntil = 0
+    GameState.stallTickAccumulator = 0
+    GameState.stallDemandRemainder = 0
+    GameState.stallLastSettlement = nil
+    GameState.equipmentWear = 0
 
     -- === 地点系统 ===
     GameState.currentLocation = 1           -- 当前摆摊地点索引（对应 GameConfig.Locations）
@@ -148,6 +162,7 @@ function GameState.addLog(text, logType)
         text = text,
         type = logType or "info",
         date = GameState.getDateText(),
+        timeText = GameState.getTimeText(),
         month = GameState.currentMonth,
         day = GameState.currentDay,
     })
@@ -155,6 +170,13 @@ function GameState.addLog(text, logType)
     while #GameState.activityLog > 50 do
         table.remove(GameState.activityLog)
     end
+end
+
+function GameState.getTimeText()
+    local total = math.max(0, GameState.timeOfDayMinutes or 0)
+    local hour = math.floor(total / 60) % 24
+    local minute = total % 60
+    return string.format('%02d:%02d', hour, minute)
 end
 
 --- 获取格式化日期文本
@@ -235,6 +257,7 @@ function GameState.toSaveData()
     data.currentDay = GameState.currentDay
     data.year = GameState.year
     data.monthInYear = GameState.monthInYear
+    data.timeOfDayMinutes = GameState.timeOfDayMinutes
     -- 财务
     data.cash = GameState.cash
     data.bankDebt = GameState.bankDebt
@@ -243,6 +266,7 @@ function GameState.toSaveData()
     data.totalRepaid = GameState.totalRepaid
     data.monthIncome = GameState.monthIncome
     data.monthExpense = GameState.monthExpense
+    data.cashLedger = GameState.cashLedger
     -- 角色
     data.energy = GameState.energy
     data.mood = GameState.mood
@@ -263,6 +287,7 @@ function GameState.toSaveData()
     data.stallProficiency = GameState.stallProficiency
     data.stallProfLevel = GameState.stallProfLevel
     data.stallTrust = GameState.stallTrust
+    data.equipmentWear = GameState.equipmentWear
     -- 地点 & 促销
     data.currentLocation = GameState.currentLocation
     data.locationTrust = GameState.locationTrust
@@ -310,7 +335,7 @@ function GameState.fromSaveData(data)
             for lid, cd in pairs(v) do
                 GameState.locationCooldowns[lid] = cd
             end
-        elseif k == "monthHistory" or k == "activityLog" or k == "viralEventsTriggered" then
+        elseif k == "monthHistory" or k == "activityLog" or k == "viralEventsTriggered" or k == "cashLedger" then
             GameState[k] = v  -- 表直接赋值（cjson 反序列化后已是新表）
         else
             GameState[k] = v
@@ -333,6 +358,17 @@ function GameState.fromSaveData(data)
     GameState.stallNaturalEarned = 0
     GameState.stallPassiveSold = 0
     GameState.stallPassiveEarned = 0
+    GameState.stallSessionRevenue = 0
+    GameState.stallSessionCosts = 0
+    GameState.stallSessionNet = 0
+    GameState.stallSessionStartCash = GameState.cash
+    GameState.stallSessionStartMinute = GameState.timeOfDayMinutes or 0
+    GameState.stallSessionEndMinute = GameState.timeOfDayMinutes or 0
+    GameState.stallActionMode = 'balanced'
+    GameState.stallActionModeUntil = 0
+    GameState.stallTickAccumulator = 0
+    GameState.stallDemandRemainder = 0
+    GameState.stallLastSettlement = nil
     GameState.pendingChengguan = false
     GameState.messages = {}
     GameState.pendingWechatEvent = nil

@@ -280,8 +280,36 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
     local StallSystem = require("core.StallSystem")
 
     local children = {}
+    local currentTime = gs.getTimeText and gs.getTimeText() or '--:--'
+    local sessionRevenue = gs.stallSessionRevenue or 0
+    local sessionCosts = gs.stallSessionCosts or 0
+    local sessionNet = (gs.stallSessionRevenue or 0) - (gs.stallSessionCosts or 0)
+    local closeHour = ((config.StallRealtime or {}).CLOSE_HOUR or 21)
+    local modeLabel = ({ balanced = '平衡经营', observe = '观望蓄客', hawk = '冲刺叫卖' })[gs.stallActionMode or 'balanced'] or '平衡经营'
 
     -- 标题 + 营业中标记
+    children[#children + 1] = UI.Panel {
+        width = "100%", padding = 6, backgroundColor = { 18, 24, 38, 220 }, borderRadius = 6,
+        flexDirection = "column", gap = 3,
+        children = {
+            UI.Panel {
+                width = "100%", flexDirection = "row", justifyContent = "space-between",
+                children = {
+                    UI.Label { text = string.format("营业时间 %s / %02d:00", currentTime, closeHour), fontSize = 10, fontColor = colors.ACCENT },
+                    UI.Label { text = modeLabel, fontSize = 9, fontColor = colors.TEXT_WHITE },
+                },
+            },
+            UI.Panel {
+                width = "100%", flexDirection = "row", justifyContent = "space-between",
+                children = {
+                    UI.Label { text = string.format("本摊收入 $%s", gs.formatMoney(sessionRevenue)), fontSize = 9, fontColor = colors.CASH_GREEN },
+                    UI.Label { text = string.format("本摊成本 $%s", gs.formatMoney(sessionCosts)), fontSize = 9, fontColor = colors.WARNING },
+                    UI.Label { text = string.format("净收益 $%s", gs.formatMoney(sessionNet)), fontSize = 9, fontColor = sessionNet >= 0 and colors.SUCCESS or colors.DANGER },
+                },
+            },
+        },
+    }
+
     children[#children + 1] = UI.Panel {
         width = "100%", flexDirection = "row", justifyContent = "center",
         alignItems = "center", gap = 6, marginBottom = 2,
@@ -1177,9 +1205,38 @@ function BottomActions.buildFinanceTab(gs, config, colors, callbacks)
     local _, _, totalInterest = require("core.FinanceSystem").getInterestPreview(gs, config)
     local F = config.Finance
 
-    -- 还款进度
     local initialTotal = F.INITIAL_BANK_DEBT + F.INITIAL_SHARK_DEBT
     local repayPct = initialTotal > 0 and math.min(1.0, gs.totalRepaid / initialTotal) or 0
+
+    local ledgerChildren = {
+        UI.Label { text = "-- 最近资金流水 --", fontSize = 11, fontColor = colors.GOLD, textAlign = "center" },
+    }
+    local ledger = gs.cashLedger or {}
+    if #ledger == 0 then
+        ledgerChildren[#ledgerChildren + 1] = UI.Label {
+            text = "还没有资金流水记录",
+            fontSize = 9, fontColor = colors.TEXT_DIM, textAlign = "center",
+        }
+    else
+        for i = 1, math.min(8, #ledger) do
+            local row = ledger[i]
+            local amountColor = row.amount >= 0 and colors.CASH_GREEN or colors.DANGER
+            local sign = row.amount >= 0 and "+$" or "-$"
+            ledgerChildren[#ledgerChildren + 1] = UI.Panel {
+                width = "100%", flexDirection = "row", justifyContent = "space-between",
+                children = {
+                    UI.Label {
+                        text = string.format("%s %s", row.timeText or "--:--", row.reason or row.category or "资金变动"),
+                        fontSize = 8, fontColor = colors.TEXT_WHITE,
+                    },
+                    UI.Label {
+                        text = string.format("%s%s", sign, gs.formatMoney(math.abs(row.amount or 0))),
+                        fontSize = 8, fontColor = amountColor,
+                    },
+                },
+            }
+        end
+    end
 
     return UI.Panel {
         id = "financeList",
@@ -1187,7 +1244,6 @@ function BottomActions.buildFinanceTab(gs, config, colors, callbacks)
         flexDirection = "column",
         gap = 6,
         children = {
-            -- 还款进度条
             UI.Panel {
                 width = "100%", padding = 8, backgroundColor = { 25, 35, 30, 200 }, borderRadius = 6,
                 flexDirection = "column", gap = 4,
@@ -1205,7 +1261,6 @@ function BottomActions.buildFinanceTab(gs, config, colors, callbacks)
                     },
                 },
             },
-            -- 债务明细
             UI.Panel {
                 width = "100%", padding = 8, backgroundColor = { 25, 30, 45, 200 }, borderRadius = 6,
                 flexDirection = "column", gap = 4,
@@ -1216,7 +1271,11 @@ function BottomActions.buildFinanceTab(gs, config, colors, callbacks)
                     BottomActions.financeRow("月利息预估", "$" .. gs.formatMoney(totalInterest), colors.WARNING, colors),
                 },
             },
-            -- 还款按钮
+            UI.Panel {
+                width = "100%", padding = 8, backgroundColor = { 18, 24, 38, 220 }, borderRadius = 6,
+                flexDirection = "column", gap = 4,
+                children = ledgerChildren,
+            },
             UI.Panel {
                 width = "100%", flexDirection = "row", gap = 6,
                 children = {

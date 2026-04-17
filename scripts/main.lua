@@ -106,6 +106,13 @@ function HandleUpdate(eventType, eventData)
     local dt = eventData["TimeStep"]:GetFloat()
     gs.animTime = (gs.animTime or 0) + dt
 
+    if gs.isStalling then
+        local changed = StallSystem.updateRealtime(gs, config, dt)
+        if changed then
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+        end
+    end
+
     -- 更新制作进度条动画
     UpdatePrepProgress()
 end
@@ -114,8 +121,8 @@ end
 -- 破产检查与警告
 -- ============================================================================
 
---- 检查财务状况，弹出警告或游戏结束
---- @return boolean true=游戏结束，false=继续
+--- 破产检查与警告?????????
+--- @return boolean true=游戏结束?false=继续
 function CheckAndWarnFinancial()
     local status = gs.checkFinancialHealth(config)
     if status == "ok" then
