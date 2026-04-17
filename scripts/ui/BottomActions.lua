@@ -410,7 +410,7 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
         -- 最近网红事件
         if gs.lastViralEvent then
             fameKids[#fameKids + 1] = UI.Label {
-                text = string.format("🔥 %s", gs.lastViralEvent),
+                text = string.format("🔥 %s", gs.lastViralEvent.name or "突然爆火"),
                 fontSize = 8, fontColor = { 255, 180, 50, 255 }, textAlign = "center",
             }
         end
@@ -491,21 +491,35 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
         }
     end
 
-    -- 上轮被动收入提示（如果有）
+    -- 本轮经营结果
     local pSold = gs.stallPassiveSold or 0
     local pEarned = gs.stallPassiveEarned or 0
-    if pSold > 0 then
-        children[#children + 1] = UI.Panel {
-            width = "100%", padding = 4, backgroundColor = { 30, 55, 40, 150 }, borderRadius = 4,
-            flexDirection = "row", justifyContent = "center", gap = 4,
-            children = {
-                UI.Label {
-                    text = string.format("上轮回头客: %d份 赚$%s", pSold, gs.formatMoney(pEarned)),
-                    fontSize = 9, fontColor = { 140, 230, 160, 255 },
+    local nSold = gs.stallNaturalSold or 0
+    local nEarned = gs.stallNaturalEarned or 0
+    children[#children + 1] = UI.Panel {
+        width = "100%", padding = 6, backgroundColor = { 26, 40, 34, 180 }, borderRadius = 6,
+        flexDirection = "column", gap = 3,
+        children = {
+            UI.Label {
+                text = "-- 本轮经营结果 --",
+                fontSize = 10, fontColor = { 140, 230, 160, 255 }, textAlign = "center",
+            },
+            UI.Panel {
+                width = "100%", flexDirection = "row", justifyContent = "space-between",
+                children = {
+                    UI.Label { text = string.format("回头客 %d份", pSold), fontSize = 9, fontColor = colors.TEXT_WHITE },
+                    UI.Label { text = string.format("+$%s", gs.formatMoney(pEarned)), fontSize = 9, fontColor = colors.CASH_GREEN },
                 },
             },
-        }
-    end
+            UI.Panel {
+                width = "100%", flexDirection = "row", justifyContent = "space-between",
+                children = {
+                    UI.Label { text = string.format("自然来客 %d份", nSold), fontSize = 9, fontColor = colors.TEXT_WHITE },
+                    UI.Label { text = string.format("+$%s", gs.formatMoney(nEarned)), fontSize = 9, fontColor = colors.CASH_GREEN },
+                },
+            },
+        },
+    }
 
     -- 熟练度信息
     local profLevel = gs.stallProfLevel or 1
@@ -530,8 +544,8 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
                         fontSize = 10, fontColor = colors.GOLD,
                     },
                     UI.Label {
-                        text = profBonus > 0 and string.format("销量+%d%%", profBonus) or "",
-                        fontSize = 9, fontColor = colors.SUCCESS,
+                        text = profBonus > 0 and string.format("销量+%d%%", profBonus) or "持续经营会越来越顺手",
+                        fontSize = 9, fontColor = profBonus > 0 and colors.SUCCESS or colors.TEXT_DIM,
                     },
                 },
             },
@@ -544,37 +558,76 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
     }
 
     -- 直播状态
-    if gs.isLiveStreaming then
-        local liveBonus = StallSystem.calcLivestreamBonus(gs, config)
-        local liveBonusPct = math.floor(liveBonus * 100)
-        children[#children + 1] = UI.Panel {
-            width = "100%", padding = 4, backgroundColor = { 180, 60, 60, 60 }, borderRadius = 4,
-            flexDirection = "row", justifyContent = "center", alignItems = "center", gap = 4,
+    local liveBonusPct = math.floor(StallSystem.calcLivestreamBonus(gs, config) * 100)
+    local liveComments = gs.liveComments or {}
+    local liveChildren = {
+        UI.Panel {
+            width = "100%", flexDirection = "row", justifyContent = "space-between",
+            alignItems = "center",
             children = {
-                UI.Label { text = string.format("📱 直播中 · 收入+%d%% · 涨粉中", liveBonusPct), fontSize = 10, fontColor = { 255, 100, 100, 255 } },
+                UI.Label {
+                    text = gs.isLiveStreaming and "📱 直播经营中" or "📱 直播未开启",
+                    fontSize = 10, fontColor = gs.isLiveStreaming and { 255, 120, 120, 255 } or colors.TEXT_DIM,
+                },
+                UI.Label {
+                    text = gs.isLiveStreaming and string.format("收入+%d%%", liveBonusPct) or "开启后可涨粉、接单、收打赏",
+                    fontSize = 8, fontColor = gs.isLiveStreaming and colors.SUCCESS or colors.TEXT_DIM,
+                },
             },
+        },
+        UI.Panel {
+            width = "100%", flexDirection = "row", justifyContent = "space-between",
+            children = {
+                UI.Label { text = string.format("观众 %d", gs.liveViewerCount or 0), fontSize = 9, fontColor = colors.TEXT_WHITE },
+                UI.Label { text = string.format("打赏 $%s", gs.formatMoney(gs.liveTipsEarned or 0)), fontSize = 9, fontColor = colors.GOLD },
+                UI.Label { text = string.format("带货 %d份", gs.liveOrdersSold or 0), fontSize = 9, fontColor = colors.CASH_GREEN },
+            },
+        },
+    }
+    if #liveComments > 0 then
+        for i = 1, math.min(3, #liveComments) do
+            liveChildren[#liveChildren + 1] = UI.Label {
+                text = string.format("• %s", liveComments[i]),
+                fontSize = 8, fontColor = { 255, 220, 220, 255 }, textAlign = "left",
+            }
+        end
+    else
+        liveChildren[#liveChildren + 1] = UI.Label {
+            text = gs.isLiveStreaming and "弹幕正在涌入，继续经营会刷新互动" or "直播不是单纯加成，它会把经营过程变成可见的人气反馈",
+            fontSize = 8, fontColor = colors.TEXT_DIM, textAlign = "left",
         }
     end
+    children[#children + 1] = UI.Panel {
+        width = "100%", padding = 6,
+        backgroundColor = gs.isLiveStreaming and { 70, 28, 34, 190 } or { 32, 24, 40, 180 },
+        borderRadius = 6,
+        borderWidth = 1,
+        borderColor = gs.isLiveStreaming and { 220, 90, 100, 120 } or { 80, 80, 110, 100 },
+        flexDirection = "column", gap = 3,
+        children = liveChildren,
+    }
 
     -- 操作按钮
-    local canHawk = gs.stallInventory > 0 and gs.energy >= item.energyCost
+    local actualHawkCost = item.energyCost
+    if gs.isSick and config.Health then
+        actualHawkCost = math.floor(item.energyCost * (config.Health.SICK_ENERGY_PENALTY or 1.5))
+    end
+    local canHawk = gs.stallInventory > 0 and gs.energy >= actualHawkCost
     local canWait = gs.stallInventory > 0
     children[#children + 1] = UI.Panel {
         width = "100%", flexDirection = "column", gap = 4, marginTop = 4,
         children = {
-            -- 叫卖按钮（主要操作）
             UI.Button {
-                text = canHawk and string.format("📣 叫卖揽客！(体力-%d)", item.energyCost)
-                    or (gs.stallInventory <= 0 and "库存卖完了" or "体力不足，试试等待观望"),
-                width = "100%", fontSize = 13, height = 40, variant = canHawk and "primary" or "ghost",
+                text = canHawk and string.format("📣 叫卖揽客（体力-%d·主动爆发拉客）", actualHawkCost)
+                    or (gs.stallInventory <= 0 and "库存卖完了" or "体力不足，先靠自然经营续住客流"),
+                width = "100%", fontSize = 12, height = 40, variant = canHawk and "primary" or "ghost",
                 disabled = not canHawk,
                 onClick = function(self)
                     if callbacks.onAction then callbacks.onAction("hawk_sell", {}) end
                 end,
             },
-            -- 等待观望按钮（低体力替代方案）
             UI.Button {
-                text = string.format("⏳ 等待观望（体力-%d·靠回头客卖货）", T.WAIT_ENERGY_COST),
+                text = string.format("⏳ 等待观望（体力-%d·接待自然来客/回头客）", T.WAIT_ENERGY_COST),
                 width = "100%", fontSize = 11, height = 34,
                 variant = canWait and (canHawk and "ghost" or "warning") or "ghost",
                 disabled = not canWait,
@@ -582,12 +635,11 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
                     if callbacks.onAction then callbacks.onAction("wait_observe", {}) end
                 end,
             },
-            -- 直播 + 收摊 按钮
             UI.Panel {
                 width = "100%", flexDirection = "row", gap = 4,
                 children = {
                     UI.Button {
-                        text = gs.isLiveStreaming and "📱关直播" or "📱开直播",
+                        text = gs.isLiveStreaming and "📱 关直播" or "📱 开直播",
                         flex = 1, fontSize = 10, height = 32,
                         variant = gs.isLiveStreaming and "danger" or "warning",
                         onClick = function(self)
@@ -608,8 +660,8 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
 
     -- 提示
     local tipText = not canHawk and canWait
-        and "💡 体力不足？用等待观望，靠口碑让回头客自己来买！"
-        or "💡 每次叫卖会吸引1-3位顾客，多叫卖几轮卖完库存吧！"
+        and "💡 叫卖负责短时爆发，等待负责承接自然客流，直播负责把经营热度放大成粉丝和订单。"
+        or "💡 先用叫卖拉第一波，再靠口碑、名气、地点和直播把摊位经营成自带客流的生意。"
     local tipColor = not canHawk and canWait and { 120, 200, 255, 255 } or colors.WARNING
     children[#children + 1] = UI.Label {
         text = tipText,

@@ -101,3 +101,21 @@
 - Details: replaced stall-day lock text with previous-item xp progress and wired the lock bar to the mastery requirement
 - Risk: lock labels may need a short wording polish in narrow layouts
 - Validation: item selector no longer references stall-day unlock variables
+
+- File: `scripts/core/StallSystem.lua`
+- Purpose: turn stalling into a fuller management loop instead of pure hawking
+- Details: rewrote `hawkSell`, `waitObserve`, and `toggleLiveStream` so waiting can convert natural traffic, livestreaming produces visible comments, tips, follower growth, and extra orders, and result messages now explain the经营飞轮 clearly
+- Risk: the new customer flow and livestream conversion rates will likely need one in-game balance pass
+- Validation: core turn functions were reread after patching and checked with `git diff --check`
+
+- File: `scripts/ui/BottomActions.lua`
+- Purpose: repair and expand the in-stall UI for the new management loop
+- Details: rebuilt the broken stalling view to show natural visitors, return customers, livestream stats, recent comments, and new button copy that positions hawking as burst traffic and waiting as natural operations
+- Risk: panel density may still need small spacing tweaks after visual playtest on narrow windows
+- Validation: rebuilt function body was reread to confirm structure closure and action wiring
+
+- File: `scripts/config/GameConfig.lua`
+- Purpose: restore readable livestream config content
+- Details: replaced corrupted livestream comments, viewer names, and comment templates with valid Chinese strings that support visible fan interaction in gameplay
+- Risk: dialogue flavor may still be tuned later for stronger personality variety
+- Validation: config block reread after patching and no placeholder question-mark strings remained in the edited section

@@ -732,6 +732,39 @@ GameConfig.Fame = {
     LIVESTREAM_FAME_CAP = 0.50,        -- 名气带来的直播加成上限
 }
 
+GameConfig.LiveStream = {
+    BASE_VIEWERS = { 6, 15 },          -- 开播初始观众
+    MAX_VIEWERS = 5000,
+    FOLLOWERS_PER_VIEWER = 40,         -- 每40粉丝额外换来1名观众
+    FAME_PER_VIEWER = 80,              -- 每80点名气额外换来1名观众
+    TRUST_PER_VIEWER = 20,             -- 口碑越高，直播间越容易进人
+    HAWK_VIEWER_BONUS = 6,             -- 叫卖时观众更爱围观
+    COMMENT_VIEWERS_STEP = 25,         -- 每25名观众多刷一批弹幕
+    MAX_COMMENTS_PER_TURN = 2,
+    TIP_CHANCE_BASE = 0.18,
+    TIP_CHANCE_PER_50_VIEWERS = 0.05,
+    TIP_CHANCE_CAP = 0.60,
+    TIP_RANGE = { 6, 36 },
+    FOLLOWERS_GAIN_BASE = { 2, 8 },
+    FOLLOWERS_GAIN_PER_20_VIEWERS = 1,
+    ORDER_CHANCE_BASE = 0.20,
+    ORDER_CHANCE_HAWK_BONUS = 0.10,
+    ORDER_CHANCE_CAP = 0.65,
+    ORDER_UNITS = { 1, 3 },
+    VIEWER_NAMES = {
+        "老铁阿豪", "深夜路人", "吃货小雨", "隔壁王姐", "下班老张",
+        "学生阿乐", "美食探探", "今天不减肥", "夜市常客", "追更小李",
+    },
+    COMMENT_LINES = {
+        "%s看起来是真香啊！",
+        "这个%s多少钱，想下单！",
+        "老板这%s还有吗？",
+        "直播刷到你了，专门来看看%s。",
+        "这摊气氛不错，给%s点个赞。",
+        "弹幕打卡，今天能不能冲一波热度？",
+    },
+}
+
 -- 网红/爆红事件（信任度或名气达到阈值时触发）
 GameConfig.ViralEvents = {
     {

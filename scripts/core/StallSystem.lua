@@ -15,6 +15,15 @@ local function addItemProgress(gs, itemId, amount)
     return gs.itemProgress[itemId]
 end
 
+local function pushLiveComment(gs, text)
+    if not text or text == "" then return end
+    gs.liveComments = gs.liveComments or {}
+    table.insert(gs.liveComments, 1, text)
+    while #gs.liveComments > 4 do
+        table.remove(gs.liveComments)
+    end
+end
+
 --- 上次事件结果
 StallSystem.lastStallEvent = nil
 
@@ -92,6 +101,126 @@ function StallSystem.calcPassiveSales(gs, config)
     end
 
     return math.max(0, baseSales)
+end
+
+function StallSystem.calcNaturalSales(gs, config)
+    local loc = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
+    local trust = gs.stallTrust or 0
+    local fameCustomers = StallSystem.calcFameCustomers(gs, config)
+    local base = 1 + math.floor(trust / 35)
+    if loc then
+        base = math.max(1, math.floor(base * (loc.customerMod or 1.0)))
+
+        local dayOfWeek = ((gs.currentDay - 1) % 7) + 1
+        if loc.peakDays then
+            for _, pd in ipairs(loc.peakDays) do
+                if pd == dayOfWeek then
+                    base = math.floor(base * (1 + (loc.peakBonus or 0) * 0.5))
+                    break
+                end
+            end
+        end
+    end
+    base = base + math.max(1, math.floor(fameCustomers * 0.35))
+
+    local usedSlots = gs.stallTimeSlot or 0
+    if loc then
+        local maxSlots = loc.maxSlots or 5
+        if usedSlots >= maxSlots then
+            base = math.max(0, math.floor(base * 0.35))
+        elseif usedSlots >= math.max(1, maxSlots - 1) then
+            base = math.max(0, math.floor(base * 0.70))
+        end
+    end
+
+    if gs.currentWeather == "rainy" or gs.currentWeather == "stormy" then
+        base = math.max(0, math.floor(base * 0.70))
+    elseif gs.currentWeather == "snowy" then
+        base = math.max(0, math.floor(base * 0.60))
+    end
+
+    local promo = StallSystem.getActivePromotionConfig(gs, config)
+    if promo then
+        base = math.floor(base * (1 + math.max(0, (promo.salesMod or 1.0) - 1) * 0.5))
+    end
+
+    return math.max(0, base)
+end
+
+function StallSystem.applyLiveStreamTurn(gs, config, item, actionTag)
+    if not gs.isLiveStreaming or not config.LiveStream then
+        return { viewers = 0, comments = {}, tips = 0, tipIncome = 0, extraUnits = 0, extraIncome = 0, followers = 0 }
+    end
+
+    local L = config.LiveStream
+    local viewers = math.random(L.BASE_VIEWERS[1], L.BASE_VIEWERS[2])
+    viewers = viewers + math.floor((gs.followers or 0) / (L.FOLLOWERS_PER_VIEWER or 40))
+    viewers = viewers + math.floor((gs.fame or 0) / (L.FAME_PER_VIEWER or 80))
+    viewers = viewers + math.floor((gs.stallTrust or 0) / (L.TRUST_PER_VIEWER or 20))
+    if actionTag == "hawk" then
+        viewers = viewers + (L.HAWK_VIEWER_BONUS or 0)
+    end
+    viewers = math.max(0, math.min(L.MAX_VIEWERS or 5000, viewers))
+    gs.liveViewerCount = viewers
+
+    local comments = {}
+    local commentCount = math.min(L.MAX_COMMENTS_PER_TURN or 2, math.floor(viewers / (L.COMMENT_VIEWERS_STEP or 25)) + 1)
+    if viewers <= 0 then commentCount = 0 end
+
+    for _ = 1, commentCount do
+        local line = L.COMMENT_LINES[math.random(1, #L.COMMENT_LINES)]
+        local viewerName = L.VIEWER_NAMES[math.random(1, #L.VIEWER_NAMES)]
+        local fullText = string.format("%s：%s", viewerName, string.format(line, item.name))
+        comments[#comments + 1] = fullText
+        pushLiveComment(gs, fullText)
+    end
+
+    local tipChance = math.min(
+        L.TIP_CHANCE_CAP or 0.60,
+        (L.TIP_CHANCE_BASE or 0.18) + math.floor(viewers / 50) * (L.TIP_CHANCE_PER_50_VIEWERS or 0.05)
+    )
+    local tipIncome = 0
+    local tips = 0
+    if viewers > 0 and math.random() < tipChance then
+        tipIncome = math.random(L.TIP_RANGE[1], L.TIP_RANGE[2])
+        tips = 1
+        gs.liveTipsEarned = (gs.liveTipsEarned or 0) + tipIncome
+        gs.cash = gs.cash + tipIncome
+        gs.stallTotalEarned = gs.stallTotalEarned + tipIncome
+    end
+
+    local followersGain = math.random(L.FOLLOWERS_GAIN_BASE[1], L.FOLLOWERS_GAIN_BASE[2])
+        + math.floor(viewers / 20) * (L.FOLLOWERS_GAIN_PER_20_VIEWERS or 1)
+    gs.followers = (gs.followers or 0) + followersGain
+
+    local extraUnits = 0
+    local extraIncome = 0
+    local orderChance = math.min(
+        L.ORDER_CHANCE_CAP or 0.65,
+        (L.ORDER_CHANCE_BASE or 0.20) + (actionTag == "hawk" and (L.ORDER_CHANCE_HAWK_BONUS or 0) or 0)
+    )
+    if gs.stallInventory > 0 and viewers > 0 and math.random() < orderChance then
+        extraUnits = math.min(gs.stallInventory, math.random(L.ORDER_UNITS[1], L.ORDER_UNITS[2]))
+        if extraUnits > 0 then
+            local modifier = StallSystem.calcIncomeModifiers(gs, config)
+            extraIncome = math.floor(extraUnits * item.unitPrice * modifier)
+            gs.stallInventory = gs.stallInventory - extraUnits
+            gs.stallTotalSold = gs.stallTotalSold + extraUnits
+            gs.stallTotalEarned = gs.stallTotalEarned + extraIncome
+            gs.cash = gs.cash + extraIncome
+            gs.liveOrdersSold = (gs.liveOrdersSold or 0) + extraUnits
+        end
+    end
+
+    return {
+        viewers = viewers,
+        comments = comments,
+        tips = tips,
+        tipIncome = tipIncome,
+        extraUnits = extraUnits,
+        extraIncome = extraIncome,
+        followers = followersGain,
+    }
 end
 
 --- 增加信任度（同步保存到当前地点的独立信任度）
@@ -319,7 +448,13 @@ function StallSystem.openStall(gs, config)
     gs.stallTotalEarned = 0
     gs.stallPassiveSold = 0
     gs.stallPassiveEarned = 0
+    gs.stallNaturalSold = 0
+    gs.stallNaturalEarned = 0
     gs.isLiveStreaming = false
+    gs.liveViewerCount = 0
+    gs.liveTipsEarned = 0
+    gs.liveOrdersSold = 0
+    gs.liveComments = {}
     gs.stallTimeSlot = 0            -- 重置时段计数
     gs.pendingChengguan = false     -- 重置城管标记
 
@@ -361,7 +496,7 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
         return false
     end
     if gs.stallInventory <= 0 then
-        gs.addMessage("库存卖光了！该收摊啦", "warning")
+        gs.addMessage("库存卖光了，该收摊啦！", "warning")
         return false
     end
 
@@ -372,48 +507,41 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
         return false
     end
 
-    -- 生病时体力消耗增加
     local energyCostMult = 1.0
     if gs.isSick and config.Health then
         energyCostMult = config.Health.SICK_ENERGY_PENALTY or 1.5
     end
     local actualEnergyCost = math.floor(item.energyCost * energyCostMult)
-
     if gs.energy < actualEnergyCost then
-        gs.addMessage("体力不足，卖不动了！可以选择【等待观望】或收摊休息", "warning")
+        gs.addMessage("体力不足，先等客流自己过来，或者直接收摊休息。", "warning")
         return false
     end
 
-    -- 扣体力、心情
     gs.energy = math.max(0, gs.energy - actualEnergyCost)
     gs.mood = math.max(0, gs.mood - item.moodCost)
 
-    -- 收入修正因子
     local modifier = StallSystem.calcIncomeModifiers(gs, config)
     local grillMult = grillMultiplier or 1.0
+    local recipeCfg = config.RecipeProgression or {}
 
-    -- === 1. 被动销售（信任度客流） ===
     local passiveUnits, passiveIncome = StallSystem.doPassiveSales(gs, config, item, modifier * grillMult)
     gs.stallPassiveSold = passiveUnits
     gs.stallPassiveEarned = passiveIncome
+    gs.stallNaturalSold = 0
+    gs.stallNaturalEarned = 0
 
-    local recipeCfg = config.RecipeProgression or {}
     local passiveXP = math.max(0, (recipeCfg.XP_PER_SALE or 0) * passiveUnits)
     if passiveXP > 0 then
         addItemProgress(gs, item.id, passiveXP)
     end
 
-    -- === 2. 主动叫卖销售（渐进式：1-3位顾客，每人买1-3份） ===
-    local maxCanSell = gs.stallInventory  -- 被动已扣，这里是剩余库存
+    local maxCanSell = gs.stallInventory
     local H = config.Hawking
     local numCustomers = math.random(H.CUSTOMERS_PER_HAWK[1], H.CUSTOMERS_PER_HAWK[2])
-
-    -- 熟练度额外顾客（每3级+1位顾客上限）
     local profLevel = gs.stallProfLevel or 1
     local profExtraCustomers = math.floor((profLevel - 1) / 3)
     numCustomers = numCustomers + profExtraCustomers
 
-    -- 时段超时：客流大幅下降
     local locForSlot = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
     if locForSlot then
         local maxSlots = locForSlot.maxSlots or 5
@@ -423,16 +551,14 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
         end
     end
 
-    -- 逐位顾客计算购买量
     local unitsSold = 0
     local customerDetails = {}
-    for c = 1, numCustomers do
+    for _ = 1, numCustomers do
         if unitsSold >= maxCanSell then break end
         local buyUnits = math.random(H.UNITS_PER_CUSTOMER[1], H.UNITS_PER_CUSTOMER[2])
         buyUnits = math.min(buyUnits, maxCanSell - unitsSold)
         if buyUnits > 0 then
             unitsSold = unitsSold + buyUnits
-            -- 随机选一句顾客台词
             local line = H.CUSTOMER_LINES[math.random(1, #H.CUSTOMER_LINES)]
             customerDetails[#customerDetails + 1] = string.format(line, buyUnits)
         end
@@ -441,115 +567,107 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
     local gross = unitsSold * item.unitPrice
     local income = math.floor(gross * modifier * grillMult)
 
-    -- === 3. 摆摊事件 ===
     local evt = StallSystem.rollStallEvent(gs, config)
     StallSystem.lastStallEvent = evt
-
     if evt then
         if evt.effect == "chengguan_encounter" then
-            -- 城管来了！设置标记，由 main.lua 弹对话框处理
             gs.pendingChengguan = true
-            gs.addMessage(string.format("[经营] %s - %s", evt.name, evt.desc), "danger")
-            -- 先结算本轮叫卖收入再弹对话
+            gs.addMessage(string.format("[经营事件] %s - %s", evt.name, evt.desc), "danger")
         elseif evt.effect == "half_income" then
             income = math.floor(income * 0.5)
-            gs.addMessage(string.format("[经营] %s - %s", evt.name, evt.desc), "warning")
+            gs.addMessage(string.format("[经营事件] %s - %s", evt.name, evt.desc), "warning")
         elseif evt.effect == "reduce_30" then
             income = math.floor(income * 0.7)
-            gs.addMessage(string.format("[经营] %s - %s", evt.name, evt.desc), "warning")
+            gs.addMessage(string.format("[经营事件] %s - %s", evt.name, evt.desc), "warning")
         elseif evt.effect == "repair_cost" then
             local repairCost = math.random(1000, 5000) * (gs.mainBizTier or 1)
             gs.cash = gs.cash - repairCost
-            gs.addMessage(string.format("[经营] %s 维修费$%d", evt.name, repairCost), "warning")
+            gs.addMessage(string.format("[经营事件] %s，维修花了$%d", evt.name, repairCost), "warning")
         elseif evt.effect == "double_income" then
             income = income * 2
-            gs.addMessage(string.format("[经营] %s - %s", evt.name, evt.desc), "success")
+            gs.addMessage(string.format("[经营事件] %s - %s", evt.name, evt.desc), "success")
         elseif evt.effect == "reputation_up" then
             gs.reputation = (gs.reputation or 0) + math.random(5, 15)
             StallSystem.addTrust(gs, config, math.random(3, 6))
-            gs.addMessage(string.format("[经营] %s 声望+，口碑提升！", evt.name), "success")
+            gs.addMessage(string.format("[经营事件] %s，口碑和声望都涨了！", evt.name), "success")
         elseif evt.effect == "fans_up" then
             local fans = math.random(50, 300)
             gs.followers = gs.followers + fans
-            gs.addMessage(string.format("[经营] %s 涨粉+%d", evt.name, fans), "success")
+            gs.addMessage(string.format("[经营事件] %s，涨粉+%d", evt.name, fans), "success")
         end
     end
 
-    -- === 4. 更新库存和收入（主动部分） ===
     gs.stallInventory = gs.stallInventory - unitsSold
     gs.stallTotalSold = gs.stallTotalSold + unitsSold
     gs.stallTotalEarned = gs.stallTotalEarned + income
     gs.cash = gs.cash + income
 
-    local recipeCfg = config.RecipeProgression or {}
     local activeXP = math.max(0, (recipeCfg.XP_PER_SALE or 0) * unitsSold)
     if activeXP > 0 then
         addItemProgress(gs, item.id, activeXP)
     end
 
-    -- 直播额外涨粉
-    if gs.isLiveStreaming then
-        local fans = math.random(5, 30)
-        gs.followers = gs.followers + fans
-    end
-
-    -- === 5. 信任度增长（叫卖涨得多） ===
-    local T = config.Trust
-    local trustGain = math.random(T.HAWK_TRUST_GAIN[1], T.HAWK_TRUST_GAIN[2])
-    -- 地点信任增长倍率
+    local trustGain = math.random(config.Trust.HAWK_TRUST_GAIN[1], config.Trust.HAWK_TRUST_GAIN[2])
     local locForTrust = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
     if locForTrust then
         trustGain = math.floor(trustGain * (locForTrust.trustGainMod or 1.0))
     end
-    -- 促销活动额外信任加成
     local promoForTrust = StallSystem.getActivePromotionConfig(gs, config)
     if promoForTrust then
         trustGain = trustGain + (promoForTrust.trustGainBonus or 0)
     end
     StallSystem.addTrust(gs, config, trustGain)
 
-    -- 显示顾客台词（最多显示3条，避免刷屏）
     local actualCustomerCount = #customerDetails
     for i = 1, math.min(3, actualCustomerCount) do
-        gs.addMessage(string.format("🧑 顾客%d: %s", i, customerDetails[i]), "info")
+        gs.addMessage(string.format("顾客%d：%s", i, customerDetails[i]), "info")
     end
     if actualCustomerCount > 3 then
-        gs.addMessage(string.format("...还有%d位顾客也买了", actualCustomerCount - 3), "info")
+        gs.addMessage(string.format("还有%d位顾客也跟着下单了。", actualCustomerCount - 3), "info")
     end
 
-    -- 显示综合结果
-    local tierDef = ProgressionSystem.getCurrentTier(gs, config)
-    local tierName = tierDef and tierDef.name or "经营"
-    local liveTag = gs.isLiveStreaming and " 📱直播中" or ""
-    local totalUnits = unitsSold + passiveUnits
-    local totalIncome = income + passiveIncome
-    local passiveTag = passiveUnits > 0
-        and string.format("（叫卖%d+回头客%d）", unitsSold, passiveUnits) or ""
+    local liveResult = StallSystem.applyLiveStreamTurn(gs, config, item, "hawk")
+    if gs.isLiveStreaming then
+        for i = 1, math.min(2, #liveResult.comments) do
+            gs.addMessage(string.format("直播间：%s", liveResult.comments[i]), "info")
+        end
+    end
 
-    gs.addMessage(string.format("来了%d位顾客，卖出%d份%s%s%s，赚$%s | 余%d份",
-        actualCustomerCount, totalUnits, item.name, passiveTag, liveTag,
-        gs.formatMoney(totalIncome), gs.stallInventory), "success")
+    local totalUnits = unitsSold + passiveUnits + liveResult.extraUnits
+    local totalIncome = income + passiveIncome + liveResult.tipIncome + liveResult.extraIncome
+    local detailParts = {}
+    if unitsSold > 0 then
+        detailParts[#detailParts + 1] = string.format("主动成交%d份", unitsSold)
+    end
+    if passiveUnits > 0 then
+        detailParts[#detailParts + 1] = string.format("回头客%d份", passiveUnits)
+    end
+    if liveResult.extraUnits > 0 then
+        detailParts[#detailParts + 1] = string.format("直播带货%d份", liveResult.extraUnits)
+    end
+    if liveResult.tipIncome > 0 then
+        detailParts[#detailParts + 1] = string.format("打赏$%s", gs.formatMoney(liveResult.tipIncome))
+    end
+    detailParts[#detailParts + 1] = string.format("涨粉+%d", liveResult.followers or 0)
+    gs.addMessage(string.format("一轮叫卖成交%d份%s，收入$%s，剩余%d份。",
+        totalUnits,
+        #detailParts > 0 and ("（" .. table.concat(detailParts, "，") .. "）") or "",
+        gs.formatMoney(totalIncome),
+        gs.stallInventory), "success")
 
-    -- === 6. 时段推进 ===
     gs.stallTimeSlot = (gs.stallTimeSlot or 0) + 1
-
-    -- === 7. 库存卖完自动收摊 ===
     if gs.stallInventory <= 0 then
-        gs.addMessage("库存全部卖完了！本次营业结束", "info")
+        gs.addMessage("这一锅卖完了，今天这摊很漂亮！", "info")
         StallSystem.doCloseStall(gs, config)
     end
 
-    -- === 8. 熟练度经验增长 ===
-    local profFans = StallSystem.processProficiency(gs, config)
-
-    -- === 8. 名气增长 ===
+    StallSystem.processProficiency(gs, config)
     if config.Fame then
         local fameGain = math.random(config.Fame.HAWK_FAME_GAIN[1], config.Fame.HAWK_FAME_GAIN[2])
         if gs.isLiveStreaming then
             fameGain = math.floor(fameGain * config.Fame.LIVESTREAM_FAME_MULT)
         end
         StallSystem.addFame(gs, config, fameGain)
-        -- 促销名气加成
         if gs.activePromotion then
             local activePromo = StallSystem.getActivePromotionConfig(gs, config)
             if activePromo and activePromo.fameGainBonus then
@@ -558,30 +676,25 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
         end
     end
 
-    -- === 9. 网红事件触发 ===
     StallSystem.rollViralEvent(gs, config)
-
-    -- 记录活动日志
-    gs.addLog(string.format("叫卖招来%d位顾客，卖%d份%s（回头客%d），赚$%s，口碑+%d",
-        actualCustomerCount, totalUnits, item.name, passiveUnits,
-        gs.formatMoney(totalIncome), trustGain), "sell")
+    gs.addLog(string.format("叫卖成交%d份%s，收入$%s，口碑+%d",
+        totalUnits,
+        item and ("（" .. item.name .. "）") or "",
+        gs.formatMoney(totalIncome),
+        trustGain), "sell")
 
     PlayerSystem.addSkillXP(gs, "negotiation", math.random(8, 20), config)
     PlayerSystem.addSkillXP(gs, "marketing", math.random(3, 10), config)
-
     return true
 end
 
--- ============================================================================
--- 等待观望（低体力时也能赚钱，消耗回合）
--- ============================================================================
 function StallSystem.waitObserve(gs, config)
     if not gs.isStalling then
         gs.addMessage("还没出摊呢！", "warning")
         return false
     end
     if gs.stallInventory <= 0 then
-        gs.addMessage("库存卖光了！该收摊啦", "warning")
+        gs.addMessage("库存已经卖完了，可以直接收摊。", "warning")
         return false
     end
 
@@ -592,112 +705,116 @@ function StallSystem.waitObserve(gs, config)
         return false
     end
 
-    local T = config.Trust
-
-    -- 消耗少量体力和心情
-    local energyCost = T.WAIT_ENERGY_COST
-    local moodCost = T.WAIT_MOOD_COST
+    local energyCost = config.Trust.WAIT_ENERGY_COST
+    local moodCost = config.Trust.WAIT_MOOD_COST
     if gs.energy < energyCost then
-        -- 即使体力极低也允许等待，但不扣到负数
         energyCost = gs.energy
     end
     gs.energy = math.max(0, gs.energy - energyCost)
     gs.mood = math.max(0, gs.mood - moodCost)
 
-    -- 收入修正
     local modifier = StallSystem.calcIncomeModifiers(gs, config)
-
-    -- === 被动销售 ===
     local passiveUnits, passiveIncome = StallSystem.doPassiveSales(gs, config, item, modifier)
     gs.stallPassiveSold = passiveUnits
     gs.stallPassiveEarned = passiveIncome
 
-    local waitXP = math.max(0, ((config.RecipeProgression or {}).XP_PER_SALE or 0) * passiveUnits)
+    local naturalUnits = math.min(gs.stallInventory, StallSystem.calcNaturalSales(gs, config))
+    local naturalIncome = 0
+    if naturalUnits > 0 then
+        naturalIncome = math.floor(naturalUnits * item.unitPrice * modifier)
+        gs.stallInventory = gs.stallInventory - naturalUnits
+        gs.stallTotalSold = gs.stallTotalSold + naturalUnits
+        gs.stallTotalEarned = gs.stallTotalEarned + naturalIncome
+        gs.cash = gs.cash + naturalIncome
+    end
+    gs.stallNaturalSold = naturalUnits
+    gs.stallNaturalEarned = naturalIncome
+
+    local waitXP = math.max(0, ((config.RecipeProgression or {}).XP_PER_SALE or 0) * (passiveUnits + naturalUnits))
     if waitXP > 0 then
         addItemProgress(gs, item.id, waitXP)
     end
 
-    -- === 信任度微涨（等待也能跟路人打招呼） ===
-    local trustGain = math.random(T.WAIT_TRUST_GAIN[1], T.WAIT_TRUST_GAIN[2])
-    -- 地点信任增长倍率
+    local trustGain = math.random(config.Trust.WAIT_TRUST_GAIN[1], config.Trust.WAIT_TRUST_GAIN[2])
     local locForTrust = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
     if locForTrust then
         trustGain = math.floor(trustGain * (locForTrust.trustGainMod or 1.0))
     end
-    -- 促销活动额外信任加成（等待时减半）
     local promoForTrust = StallSystem.getActivePromotionConfig(gs, config)
     if promoForTrust then
         trustGain = trustGain + math.floor((promoForTrust.trustGainBonus or 0) * 0.5)
     end
     StallSystem.addTrust(gs, config, trustGain)
 
-    -- === 摆摊事件 ===
     local evt = StallSystem.rollStallEvent(gs, config)
     StallSystem.lastStallEvent = evt
-
     if evt then
         if evt.effect == "chengguan_encounter" then
-            -- 城管来了！设置标记，由 main.lua 弹对话框处理
             gs.pendingChengguan = true
-            gs.addMessage(string.format("[经营] %s - %s", evt.name, evt.desc), "danger")
+            gs.addMessage(string.format("[经营事件] %s - %s", evt.name, evt.desc), "danger")
         elseif evt.effect == "half_income" then
-            -- 被动收入已结算，这里不重复处理
-            gs.addMessage(string.format("[经营] %s - %s", evt.name, evt.desc), "warning")
+            gs.addMessage(string.format("[经营事件] %s - %s", evt.name, evt.desc), "warning")
         elseif evt.effect == "double_income" then
-            -- 额外奖励
-            local bonus = passiveIncome
+            local bonus = passiveIncome + naturalIncome
             gs.cash = gs.cash + bonus
             gs.stallTotalEarned = gs.stallTotalEarned + bonus
-            passiveIncome = passiveIncome + bonus
-            gs.addMessage(string.format("[经营] %s - %s 额外+$%s", evt.name, evt.desc, gs.formatMoney(bonus)), "success")
+            gs.addMessage(string.format("[经营事件] %s，额外多赚$%s", evt.name, gs.formatMoney(bonus)), "success")
         elseif evt.effect == "reputation_up" then
             gs.reputation = (gs.reputation or 0) + math.random(5, 15)
             StallSystem.addTrust(gs, config, math.random(3, 6))
-            gs.addMessage(string.format("[经营] %s 声望+，口碑提升！", evt.name), "success")
+            gs.addMessage(string.format("[经营事件] %s，附近人对你的评价更好了。", evt.name), "success")
         elseif evt.effect == "fans_up" then
             local fans = math.random(50, 300)
             gs.followers = gs.followers + fans
-            gs.addMessage(string.format("[经营] %s 涨粉+%d", evt.name, fans), "success")
+            gs.addMessage(string.format("[经营事件] %s，涨粉+%d", evt.name, fans), "success")
         elseif evt.effect == "repair_cost" then
             local repairCost = math.random(1000, 5000) * (gs.mainBizTier or 1)
             gs.cash = gs.cash - repairCost
-            gs.addMessage(string.format("[经营] %s 维修费$%d", evt.name, repairCost), "warning")
+            gs.addMessage(string.format("[经营事件] %s，维修花了$%d", evt.name, repairCost), "warning")
         elseif evt.effect == "reduce_30" then
-            gs.addMessage(string.format("[经营] %s - %s", evt.name, evt.desc), "warning")
+            gs.addMessage(string.format("[经营事件] %s - %s", evt.name, evt.desc), "warning")
         end
     end
 
-    -- 时段推进
+    local liveResult = StallSystem.applyLiveStreamTurn(gs, config, item, "wait")
     gs.stallTimeSlot = (gs.stallTimeSlot or 0) + 1
 
-    -- 显示结果
-    local trustInfo = StallSystem.getTrustInfo(gs, config)
+    local totalWaitIncome = passiveIncome + naturalIncome + liveResult.tipIncome + liveResult.extraIncome
+    local parts = {}
     if passiveUnits > 0 then
-        gs.addMessage(string.format("等待观望中…回头客买了%d份%s，赚$%s | 库存余%d份",
-            passiveUnits, item.name, gs.formatMoney(passiveIncome), gs.stallInventory), "info")
+        parts[#parts + 1] = string.format("回头客%d份", passiveUnits)
+    end
+    if naturalUnits > 0 then
+        parts[#parts + 1] = string.format("自然来客%d份", naturalUnits)
+    end
+    if liveResult.extraUnits > 0 then
+        parts[#parts + 1] = string.format("直播带货%d份", liveResult.extraUnits)
+    end
+    if #parts > 0 then
+        gs.addMessage(string.format("你先稳住摊位节奏，%s，收入$%s，剩余%d份。",
+            table.concat(parts, "，"), gs.formatMoney(totalWaitIncome), gs.stallInventory), "info")
     else
-        gs.addMessage(string.format("等了半天，没什么人…%s口碑还需要积累",
-            trustInfo.emoji), "info")
+        gs.addMessage("这轮没有立刻成交，但摊位热度和口碑还在继续发酵。", "info")
     end
 
-    -- 直播额外涨粉
     if gs.isLiveStreaming then
-        local fans = math.random(3, 15)
-        gs.followers = gs.followers + fans
+        local liveParts = { string.format("观众%d", liveResult.viewers) }
+        if liveResult.tipIncome > 0 then
+            liveParts[#liveParts + 1] = string.format("打赏$%s", gs.formatMoney(liveResult.tipIncome))
+        end
+        liveParts[#liveParts + 1] = string.format("涨粉+%d", liveResult.followers)
+        gs.addMessage(string.format("直播反馈：%s", table.concat(liveParts, "，")), "info")
+        for i = 1, math.min(2, #liveResult.comments) do
+            gs.addMessage(string.format("直播间：%s", liveResult.comments[i]), "info")
+        end
     end
 
-    -- 库存卖完自动收摊
     if gs.stallInventory <= 0 then
-        gs.addMessage("库存全部卖完了！本次营业结束", "info")
+        gs.addMessage("自然客流把库存也带空了，今天这摊稳稳收住。", "info")
         StallSystem.doCloseStall(gs, config)
     end
 
-    -- 少量熟练度（等待也在学习经营）
-    local P = config.Proficiency
-    local profXP = math.random(3, 8)
-    gs.stallProficiency = (gs.stallProficiency or 0) + profXP
-
-    -- 名气微涨
+    gs.stallProficiency = (gs.stallProficiency or 0) + math.random(3, 8)
     if config.Fame then
         local fameGain = math.random(config.Fame.WAIT_FAME_GAIN[1], config.Fame.WAIT_FAME_GAIN[2])
         if gs.isLiveStreaming then
@@ -708,23 +825,14 @@ function StallSystem.waitObserve(gs, config)
         end
     end
 
-    -- 网红事件（等待时也有小概率触发）
     StallSystem.rollViralEvent(gs, config)
-
-    -- 记录日志
-    gs.addLog(string.format("等待观望，回头客买%d份%s，赚$%s，口碑+%d",
-        passiveUnits, item.name, gs.formatMoney(passiveIncome), trustGain), "sell")
+    gs.addLog(string.format("等待经营：回头客%d份，自然来客%d份，收入$%s，口碑+%d",
+        passiveUnits, naturalUnits, gs.formatMoney(totalWaitIncome), trustGain), "sell")
 
     PlayerSystem.addSkillXP(gs, "negotiation", math.random(2, 6), config)
-
     return true
 end
 
--- ============================================================================
--- 收摊
--- ============================================================================
-
---- 收摊（不消耗回合）
 function StallSystem.closeStall(gs, config)
     if not gs.isStalling then
         gs.addMessage("还没出摊呢！", "warning")
@@ -755,26 +863,35 @@ function StallSystem.doCloseStall(gs, config)
     gs.stallTotalEarned = 0
     gs.stallPassiveSold = 0
     gs.stallPassiveEarned = 0
+    gs.stallNaturalSold = 0
+    gs.stallNaturalEarned = 0
     gs.isLiveStreaming = false
+    gs.liveViewerCount = 0
+    gs.liveTipsEarned = 0
+    gs.liveOrdersSold = 0
+    gs.liveComments = {}
     gs.currentActivity = "idle"
 end
 
 --- 开/关直播（不消耗回合）
 function StallSystem.toggleLiveStream(gs, config)
     if not gs.isStalling then
-        gs.addMessage("需要先出摊才能直播！", "warning")
+        gs.addMessage("还没开摊，没法直播。", "warning")
         return false
     end
     gs.isLiveStreaming = not gs.isLiveStreaming
     if gs.isLiveStreaming then
-        gs.addMessage("📱 开始直播！卖货收入+30%，还能涨粉", "success")
+        gs.liveViewerCount = math.random(6, 18)
+        gs.liveComments = {}
+        pushLiveComment(gs, "开播了开播了，看看今天这摊能不能冲起来！")
+        gs.addMessage("开播成功！直播间会持续带来观众、弹幕、打赏和额外订单。", "success")
     else
-        gs.addMessage("关闭直播", "info")
+        gs.liveViewerCount = 0
+        gs.addMessage("你先把直播关了，专心照看摊位。", "info")
     end
     return true
 end
 
---- 摆摊事件滚骰（40%触发率）
 function StallSystem.rollStallEvent(gs, config)
     if math.random() > 0.40 then return nil end
 

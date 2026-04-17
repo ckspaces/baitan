@@ -77,6 +77,12 @@ function GameState.init(config)
     GameState.stallTotalEarned = 0          -- 本次出摊累计收入
     GameState.isLiveStreaming = false        -- 是否在边摊边播
     GameState.stallTimeSlot = 0             -- 本次出摊已使用的时段数
+    GameState.liveViewerCount = 0           -- 当前直播间观众数
+    GameState.liveTipsEarned = 0            -- 本次直播打赏收入
+    GameState.liveOrdersSold = 0            -- 本次直播带来的额外销量
+    GameState.liveComments = {}             -- 最近直播弹幕
+    GameState.stallNaturalSold = 0          -- 本回合自然来客卖出量
+    GameState.stallNaturalEarned = 0        -- 本回合自然来客收入
 
     -- === 地点冷却（城管驱赶后冷却） ===
     GameState.locationCooldowns = {}        -- { [locationId] = 剩余冷却天数 }
@@ -319,6 +325,12 @@ function GameState.fromSaveData(data)
     GameState.stallTotalEarned = 0
     GameState.isLiveStreaming = false
     GameState.stallTimeSlot = 0
+    GameState.liveViewerCount = 0
+    GameState.liveTipsEarned = 0
+    GameState.liveOrdersSold = 0
+    GameState.liveComments = {}
+    GameState.stallNaturalSold = 0
+    GameState.stallNaturalEarned = 0
     GameState.stallPassiveSold = 0
     GameState.stallPassiveEarned = 0
     GameState.pendingChengguan = false
