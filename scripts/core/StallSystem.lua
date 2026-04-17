@@ -1184,7 +1184,8 @@ function StallSystem.applyChengguanChoice(gs, config, choice)
 
     if choice.id == "sweet_talk" then
         -- 油嘴滑舌：魅力检定
-        local charm = (gs.skills and gs.skills.charm) or 0
+        local charmData = gs.skills and gs.skills.charm
+        local charm = (charmData and charmData.level) or 0
         local rate
         if charm >= choice.charmThreshold then
             rate = choice.successRate.high
