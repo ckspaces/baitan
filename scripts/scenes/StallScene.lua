@@ -506,6 +506,7 @@ function StallScene.drawPerson(nvg, px, py, p, animTime, isWalking, facingDir, w
         local umbX = px
         local umbTopY = headY - hR - 8 * sc  -- 伞顶位置
         local umbR = 12 * sc                   -- 伞半径
+        local canopyBottomY = umbTopY + umbR * 0.7
 
         -- 伞柄（从手持位置到伞顶）
         nvgStrokeColor(nvg, nvgRGBA(80, 60, 40, 220))
@@ -515,16 +516,24 @@ function StallScene.drawPerson(nvg, px, py, p, animTime, isWalking, facingDir, w
         nvgLineTo(nvg, umbX, umbTopY)
         nvgStroke(nvg)
 
-        -- 伞面（半圆）
+        -- 伞面
         nvgBeginPath(nvg)
-        nvgArc(nvg, umbX, umbTopY, umbR, math.rad(180), math.rad(360), 1)
+        nvgMoveTo(nvg, umbX - umbR, canopyBottomY)
+        nvgQuadTo(nvg, umbX - umbR * 0.72, umbTopY - umbR * 0.22, umbX, umbTopY - umbR * 0.9)
+        nvgQuadTo(nvg, umbX + umbR * 0.72, umbTopY - umbR * 0.22, umbX + umbR, canopyBottomY)
+        nvgQuadTo(nvg, umbX + umbR * 0.42, umbTopY + umbR * 0.28, umbX, canopyBottomY - umbR * 0.1)
+        nvgQuadTo(nvg, umbX - umbR * 0.42, umbTopY + umbR * 0.28, umbX - umbR, canopyBottomY)
         nvgClosePath(nvg)
         nvgFillColor(nvg, nvgRGBA(uc[1], uc[2], uc[3], 210))
         nvgFill(nvg)
 
         -- 伞面边缘
         nvgBeginPath(nvg)
-        nvgArc(nvg, umbX, umbTopY, umbR, math.rad(180), math.rad(360), 1)
+        nvgMoveTo(nvg, umbX - umbR, canopyBottomY)
+        nvgQuadTo(nvg, umbX - umbR * 0.72, umbTopY - umbR * 0.22, umbX, umbTopY - umbR * 0.9)
+        nvgQuadTo(nvg, umbX + umbR * 0.72, umbTopY - umbR * 0.22, umbX + umbR, canopyBottomY)
+        nvgQuadTo(nvg, umbX + umbR * 0.42, umbTopY + umbR * 0.28, umbX, canopyBottomY - umbR * 0.1)
+        nvgQuadTo(nvg, umbX - umbR * 0.42, umbTopY + umbR * 0.28, umbX - umbR, canopyBottomY)
         nvgStrokeColor(nvg, nvgRGBA(
             math.max(0, uc[1] - 40),
             math.max(0, uc[2] - 40),
@@ -534,15 +543,13 @@ function StallScene.drawPerson(nvg, px, py, p, animTime, isWalking, facingDir, w
 
         -- 伞面条纹装饰
         for si = 1, 3 do
-            local angle1 = math.rad(180 + si * 36)
-            local angle2 = math.rad(180 + si * 36 + 12)
+            local stripeX = umbX - umbR * 0.55 + si * umbR * 0.55
             nvgBeginPath(nvg)
-            nvgMoveTo(nvg, umbX, umbTopY)
-            nvgLineTo(nvg, umbX + math.cos(angle1) * umbR, umbTopY + math.sin(angle1) * umbR)
-            nvgLineTo(nvg, umbX + math.cos(angle2) * umbR, umbTopY + math.sin(angle2) * umbR)
-            nvgClosePath(nvg)
-            nvgFillColor(nvg, nvgRGBA(255, 255, 255, 40))
-            nvgFill(nvg)
+            nvgMoveTo(nvg, umbX, umbTopY - umbR * 0.82)
+            nvgLineTo(nvg, stripeX, canopyBottomY - umbR * 0.05)
+            nvgStrokeColor(nvg, nvgRGBA(255, 255, 255, 40))
+            nvgStrokeWidth(nvg, 0.8 * sc)
+            nvgStroke(nvg)
         end
 
         -- 伞尖

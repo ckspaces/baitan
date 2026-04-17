@@ -44,6 +44,19 @@ function StallSystem.getTrustInfo(gs, config)
     return info
 end
 
+local function getSlotWindowInfo(gs, loc)
+    local usedSlots = gs.stallTimeSlot or 0
+    local maxSlots = loc and (loc.maxSlots or 5) or 5
+    local actionSlot = usedSlots + 1
+    return {
+        usedSlots = usedSlots,
+        maxSlots = maxSlots,
+        actionSlot = actionSlot,
+        isTailSlot = actionSlot == maxSlots,
+        isOverSlot = actionSlot > maxSlots,
+    }
+end
+
 --- 计算被动销售量（根据信任度线性插值 + 地点客流 + 促销加成）
 function StallSystem.calcPassiveSales(gs, config)
     local T = config.Trust
@@ -92,11 +105,11 @@ function StallSystem.calcPassiveSales(gs, config)
 
     -- 时段超时衰减（超过 maxSlots 后客流大幅下降）
     if loc then
-        local maxSlots = loc.maxSlots or 5
-        local usedSlots = gs.stallTimeSlot or 0
-        if usedSlots >= maxSlots then
-            -- 超时后客流降到30%
+        local slotInfo = getSlotWindowInfo(gs, loc)
+        if slotInfo.isOverSlot then
             baseSales = math.floor(baseSales * 0.30)
+        elseif slotInfo.isTailSlot then
+            baseSales = math.floor(baseSales * 0.70)
         end
     end
 
@@ -123,12 +136,11 @@ function StallSystem.calcNaturalSales(gs, config)
     end
     base = base + math.max(1, math.floor(fameCustomers * 0.35))
 
-    local usedSlots = gs.stallTimeSlot or 0
     if loc then
-        local maxSlots = loc.maxSlots or 5
-        if usedSlots >= maxSlots then
+        local slotInfo = getSlotWindowInfo(gs, loc)
+        if slotInfo.isOverSlot then
             base = math.max(0, math.floor(base * 0.35))
-        elseif usedSlots >= math.max(1, maxSlots - 1) then
+        elseif slotInfo.isTailSlot then
             base = math.max(0, math.floor(base * 0.70))
         end
     end
@@ -145,6 +157,124 @@ function StallSystem.calcNaturalSales(gs, config)
     end
 
     return math.max(0, base)
+end
+
+function StallSystem.getTrafficSnapshot(gs, config)
+    local loc = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
+    local reasons = {}
+    local warnings = {}
+    local score = 10
+
+    if loc then
+        local customerMod = loc.customerMod or 1.0
+        if customerMod >= 1.35 then
+            reasons[#reasons + 1] = "地点大人流"
+            score = score + 18
+        elseif customerMod >= 1.10 then
+            reasons[#reasons + 1] = "地点稳定客流"
+            score = score + 12
+        else
+            reasons[#reasons + 1] = "基础路过客流"
+            score = score + 6
+        end
+
+        local dayOfWeek = ((gs.currentDay - 1) % 7) + 1
+        if loc.peakDays then
+            for _, pd in ipairs(loc.peakDays) do
+                if pd == dayOfWeek then
+                    reasons[#reasons + 1] = "赶上地点高峰"
+                    score = score + math.floor((loc.peakBonus or 0) * 40) + 6
+                    break
+                end
+            end
+        end
+
+        local slotInfo = getSlotWindowInfo(gs, loc)
+        if slotInfo.isOverSlot then
+            warnings[#warnings + 1] = "已过营业高峰"
+            score = score - 20
+        elseif slotInfo.isTailSlot then
+            warnings[#warnings + 1] = "高峰尾段"
+            score = score - 8
+        end
+    else
+        reasons[#reasons + 1] = "基础路过客流"
+    end
+
+    local trust = gs.stallTrust or 0
+    if trust >= 70 then
+        reasons[#reasons + 1] = "口碑回流"
+        score = score + 24
+    elseif trust >= 40 then
+        reasons[#reasons + 1] = "回头客稳定"
+        score = score + 16
+    elseif trust >= 15 then
+        reasons[#reasons + 1] = "口碑在发酵"
+        score = score + 8
+    end
+
+    local fameCustomers = StallSystem.calcFameCustomers(gs, config)
+    if fameCustomers >= 6 then
+        reasons[#reasons + 1] = "名气引流"
+        score = score + 18
+    elseif fameCustomers >= 2 then
+        reasons[#reasons + 1] = "有人慕名来逛"
+        score = score + 10
+    end
+
+    local promo = StallSystem.getActivePromotionConfig(gs, config)
+    if promo then
+        reasons[#reasons + 1] = promo.name .. "活动"
+        score = score + math.max(6, math.floor(math.max(0, (promo.salesMod or 1.0) - 1.0) * 30))
+    end
+
+    local flyers = gs.flyersActive or 0
+    if flyers > 0 then
+        reasons[#reasons + 1] = "传单扩散"
+        score = score + flyers * 3
+    end
+
+    if gs.isLiveStreaming then
+        reasons[#reasons + 1] = "直播引流"
+        score = score + 12 + math.min(12, math.floor((gs.liveViewerCount or 0) / 20))
+    end
+
+    if gs.currentWeather == "rainy" or gs.currentWeather == "stormy" then
+        warnings[#warnings + 1] = "雨天客流受阻"
+        score = score - 12
+    elseif gs.currentWeather == "snowy" then
+        warnings[#warnings + 1] = "下雪天出门意愿低"
+        score = score - 16
+    elseif gs.currentWeather == "sunny" then
+        reasons[#reasons + 1] = "晴天更愿意逛"
+        score = score + 6
+    end
+
+    score = math.max(0, math.min(100, score))
+
+    local level = "冷清"
+    if score >= 80 then
+        level = "爆摊"
+    elseif score >= 60 then
+        level = "热摊"
+    elseif score >= 40 then
+        level = "稳客"
+    elseif score >= 20 then
+        level = "起势"
+    end
+
+    local summary = #reasons > 0 and table.concat(reasons, "、") or "基础路过客"
+    if #warnings > 0 then
+        summary = summary .. "；当前阻力：" .. table.concat(warnings, "、")
+    end
+
+    return {
+        score = score,
+        level = level,
+        reasons = reasons,
+        warnings = warnings,
+        summary = summary,
+    }
 end
 
 function StallSystem.applyLiveStreamTurn(gs, config, item, actionTag)
@@ -544,10 +674,11 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
 
     local locForSlot = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
     if locForSlot then
-        local maxSlots = locForSlot.maxSlots or 5
-        local usedSlots = gs.stallTimeSlot or 0
-        if usedSlots >= maxSlots then
+        local slotInfo = getSlotWindowInfo(gs, locForSlot)
+        if slotInfo.isOverSlot then
             numCustomers = math.max(1, math.floor(numCustomers * 0.30))
+        elseif slotInfo.isTailSlot then
+            numCustomers = math.max(1, math.floor(numCustomers * 0.70))
         end
     end
 
@@ -633,6 +764,7 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
         end
     end
 
+    local traffic = StallSystem.getTrafficSnapshot(gs, config)
     local totalUnits = unitsSold + passiveUnits + liveResult.extraUnits
     local totalIncome = income + passiveIncome + liveResult.tipIncome + liveResult.extraIncome
     local detailParts = {}
@@ -654,6 +786,7 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
         #detailParts > 0 and ("（" .. table.concat(detailParts, "，") .. "）") or "",
         gs.formatMoney(totalIncome),
         gs.stallInventory), "success")
+    gs.addMessage(string.format("这波客流主要来自：%s。", traffic.summary), "info")
 
     gs.stallTimeSlot = (gs.stallTimeSlot or 0) + 1
     if gs.stallInventory <= 0 then
@@ -779,6 +912,7 @@ function StallSystem.waitObserve(gs, config)
     local liveResult = StallSystem.applyLiveStreamTurn(gs, config, item, "wait")
     gs.stallTimeSlot = (gs.stallTimeSlot or 0) + 1
 
+    local traffic = StallSystem.getTrafficSnapshot(gs, config)
     local totalWaitIncome = passiveIncome + naturalIncome + liveResult.tipIncome + liveResult.extraIncome
     local parts = {}
     if passiveUnits > 0 then
@@ -796,6 +930,7 @@ function StallSystem.waitObserve(gs, config)
     else
         gs.addMessage("这轮没有立刻成交，但摊位热度和口碑还在继续发酵。", "info")
     end
+    gs.addMessage(string.format("现在的客流状态：%s。", traffic.summary), "info")
 
     if gs.isLiveStreaming then
         local liveParts = { string.format("观众%d", liveResult.viewers) }

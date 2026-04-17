@@ -334,23 +334,24 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
     local T = config.Trust
     local trustPct = math.min(1.0, trust / T.MAX_TRUST)
     local trustInfo = StallSystem.getTrustInfo(gs, config)
+    local traffic = StallSystem.getTrafficSnapshot(gs, config)
     local trustColor = trust >= 70 and colors.GOLD
         or (trust >= 30 and { 120, 200, 255, 255 } or colors.TEXT_DIM)
 
-    -- 预估被动客流文案
+    -- 口碑反馈文案
     local passiveDesc
     if trust < 15 then
-        passiveDesc = "几乎没有回头客"
+        passiveDesc = "刚起步，主要靠自己把第一波客人喊过来"
     elseif trust < 30 then
-        passiveDesc = "偶尔有人路过会买"
+        passiveDesc = "有人记住你了，偶尔会自己回来找你买"
     elseif trust < 50 then
-        passiveDesc = "有一些老顾客了"
+        passiveDesc = "回头客正在形成，自然客流慢慢变稳"
     elseif trust < 70 then
-        passiveDesc = "口碑不错，回头客稳定"
+        passiveDesc = "口碑开始接管客流，不叫卖也能卖出一部分"
     elseif trust < 90 then
-        passiveDesc = "附近的人都知道你，客流旺"
+        passiveDesc = "周边已经传开了，摊位开始自带热度"
     else
-        passiveDesc = "金字招牌，不用叫卖也爆满！"
+        passiveDesc = "金字招牌，光摆在这里就会有人来买"
     end
 
     children[#children + 1] = UI.Panel {
@@ -451,10 +452,15 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
     if curLoc then
         local maxSlots = curLoc.maxSlots or 5
         local usedSlots = gs.stallTimeSlot or 0
-        local slotPct = math.min(1.0, usedSlots / maxSlots)
-        local slotColor = usedSlots >= maxSlots and colors.DANGER
-            or (usedSlots >= maxSlots - 1 and colors.WARNING or colors.ACCENT)
-        local slotTip = usedSlots >= maxSlots and "⚠️ 已过营业高峰，客流大减！" or ""
+        local previewSlot = usedSlots + 1
+        local displaySlot = math.min(maxSlots, previewSlot)
+        local slotPct = math.min(1.0, displaySlot / maxSlots)
+        local isOverSlot = previewSlot > maxSlots
+        local isTailSlot = previewSlot == maxSlots
+        local slotColor = isOverSlot and colors.DANGER
+            or (isTailSlot and colors.WARNING or colors.ACCENT)
+        local slotTip = isOverSlot and "⚠️ 下一轮已过营业高峰，客流会明显下降！"
+            or (isTailSlot and "⚠️ 下一轮是最后黄金时段，客流开始回落。" or "")
 
         children[#children + 1] = UI.Panel {
             width = "100%", padding = 6, backgroundColor = { 25, 28, 45, 180 }, borderRadius = 5,
@@ -469,7 +475,7 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
                             fontSize = 9, fontColor = colors.ACCENT,
                         },
                         UI.Label {
-                            text = string.format("⏰ 时段 %d/%d", usedSlots, maxSlots),
+                            text = string.format("⏰ 时段 %d/%d", displaySlot, maxSlots),
                             fontSize = 9, fontColor = slotColor,
                         },
                     },
@@ -597,6 +603,37 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
             fontSize = 8, fontColor = colors.TEXT_DIM, textAlign = "left",
         }
     end
+
+    children[#children + 1] = UI.Panel {
+        width = "100%", padding = 6, backgroundColor = { 28, 34, 48, 200 }, borderRadius = 6,
+        borderWidth = 1, borderColor = { 90, 110, 150, 100 },
+        flexDirection = "column", gap = 3,
+        children = {
+            UI.Panel {
+                width = "100%", flexDirection = "row", justifyContent = "space-between",
+                alignItems = "center",
+                children = {
+                    UI.Label {
+                        text = string.format("📈 经营势能: %s", traffic.level),
+                        fontSize = 10, fontColor = colors.ACCENT,
+                    },
+                    UI.Label {
+                        text = string.format("热度 %d/100", traffic.score),
+                        fontSize = 8, fontColor = colors.TEXT_WHITE,
+                    },
+                },
+            },
+            UI.ProgressBar {
+                value = math.min(1.0, (traffic.score or 0) / 100),
+                width = "100%", height = 4, borderRadius = 2,
+                fillColor = traffic.score >= 60 and colors.SUCCESS or (traffic.score >= 30 and colors.WARNING or colors.TEXT_DIM),
+            },
+            UI.Label {
+                text = traffic.summary,
+                fontSize = 8, fontColor = colors.TEXT_DIM, textAlign = "left",
+            },
+        },
+    }
     children[#children + 1] = UI.Panel {
         width = "100%", padding = 6,
         backgroundColor = gs.isLiveStreaming and { 70, 28, 34, 190 } or { 32, 24, 40, 180 },

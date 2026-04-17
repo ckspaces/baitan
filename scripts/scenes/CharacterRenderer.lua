@@ -259,6 +259,7 @@ function CharacterRenderer.drawArms(nvg, cx, cy, scale, gs, animTime)
         local umbX = cx + 6 * scale
         local umbTopY = cy - 82 * scale
         local umbR = 24 * scale
+        local canopyBottomY = umbTopY + umbR * 0.68
 
         nvgStrokeColor(nvg, nvgRGBA(90, 70, 45, 220))
         nvgStrokeWidth(nvg, 2.0 * scale)
@@ -268,7 +269,11 @@ function CharacterRenderer.drawArms(nvg, cx, cy, scale, gs, animTime)
         nvgStroke(nvg)
 
         nvgBeginPath(nvg)
-        nvgArc(nvg, umbX, umbTopY, umbR, math.rad(180), math.rad(360), 1)
+        nvgMoveTo(nvg, umbX - umbR, canopyBottomY)
+        nvgQuadTo(nvg, umbX - umbR * 0.72, umbTopY - umbR * 0.25, umbX, umbTopY - umbR * 0.95)
+        nvgQuadTo(nvg, umbX + umbR * 0.72, umbTopY - umbR * 0.25, umbX + umbR, canopyBottomY)
+        nvgQuadTo(nvg, umbX + umbR * 0.45, umbTopY + umbR * 0.32, umbX, canopyBottomY - umbR * 0.12)
+        nvgQuadTo(nvg, umbX - umbR * 0.45, umbTopY + umbR * 0.32, umbX - umbR, canopyBottomY)
         nvgClosePath(nvg)
         nvgFillColor(nvg, nvgRGBA(70, 110, 185, 220))
         nvgFill(nvg)
