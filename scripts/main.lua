@@ -504,9 +504,8 @@ function HandleAction(actionType, data)
         return
     elseif actionType == "close_stall" then
         StallSystem.closeStall(gs, config)
-        -- 摆摊结束：收摊场景事件 + 全天推进
+        -- 摆摊结束：收摊场景事件 + 全天推进（有上下文事件就不再触发全局事件）
         EventSystem.rollContextEvent(gs, config, "stall")
-        EventSystem.rollEvent(gs, config)
         StallSystem.tickPromotion(gs, config)
         UseFullDay()
         SaveSystem.save()
@@ -565,9 +564,8 @@ function HandleAction(actionType, data)
                 if ok then
                     AudioManager.playSFX("audio/sfx/sfx_cash_register.ogg", 0.7)
                 end
-                -- 叫卖中触发摊位场景事件（不推进天数，收摊才推进）
+                -- 叫卖中触发摊位场景事件（不推进天数，收摊才推进；有上下文事件不再触发全局事件）
                 EventSystem.rollContextEvent(gs, config, gs.isLiveStreaming and "livestream" or "stall")
-                EventSystem.rollEvent(gs, config)
                 StallSystem.tickPromotion(gs, config)
                 SaveSystem.save()
                 UpdateBGM()
@@ -629,9 +627,8 @@ function HandleAction(actionType, data)
         ShowSupermarketPopup()
         return
     elseif actionType == "leave_supermarket" then
-        -- 离开超市：超市场景事件 + 消耗1个行动槽
+        -- 离开超市：超市场景事件 + 消耗1个行动槽（有上下文事件不再触发全局事件）
         EventSystem.rollContextEvent(gs, config, "supermarket")
-        EventSystem.rollEvent(gs, config)
         StallSystem.tickPromotion(gs, config)
         UseActionSlot()
         SaveSystem.save()
@@ -670,9 +667,8 @@ function HandleAction(actionType, data)
                     end
                     gs.currentScene = "stall"
                     gs.currentActivity = "idle"
-                    -- 钓鱼场景事件 + 消耗1个行动槽
+                    -- 钓鱼场景事件 + 消耗1个行动槽（有上下文事件不再触发全局事件）
                     EventSystem.rollContextEvent(gs, config, "fishing")
-                    EventSystem.rollEvent(gs, config)
                     StallSystem.tickPromotion(gs, config)
                     UseActionSlot()
                     SaveSystem.save()
@@ -695,13 +691,12 @@ function HandleAction(actionType, data)
     end
 
     if success then
-        -- 触发场景专属事件（如果有）
+        -- 触发事件：有上下文事件用上下文池，否则用全局池（二者互斥，避免双重扣款）
         if actionContext then
             EventSystem.rollContextEvent(gs, config, actionContext)
+        else
+            EventSystem.rollEvent(gs, config)
         end
-
-        -- 触发全局随机事件
-        EventSystem.rollEvent(gs, config)
 
         -- 促销天数扣减
         StallSystem.tickPromotion(gs, config)
