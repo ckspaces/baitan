@@ -58,7 +58,7 @@ function ProgressionSystem.getItemUnlockStatus(gs, config, index, items)
     items = items or ProgressionSystem.getCurrentItems(gs, config)
     local item = items[index]
     if not item then
-        return { unlocked = false, reason = missing }
+        return { unlocked = false, reason = "missing" }
     end
 
     local skillOk = gs.meetsSkillReq(item.skillReq)
