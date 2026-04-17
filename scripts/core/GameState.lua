@@ -15,6 +15,7 @@ function GameState.init(config)
     GameState.year = 1
     GameState.monthInYear = 1
     GameState.timeOfDayMinutes = 9 * 60
+    GameState.actionsToday = 0          -- 今日已消耗行动槽（0-2，满3时推进一天）
 
     -- 财务
     GameState.cash = C.INITIAL_CASH
@@ -382,6 +383,8 @@ function GameState.fromSaveData(data)
     GameState.currentActivity = "idle"
     -- 兼容旧存档（无钓鱼字段时默认为0）
     if GameState.fishStock == nil then GameState.fishStock = 0 end
+    -- 兼容旧存档（行动槽）
+    if GameState.actionsToday == nil then GameState.actionsToday = 0 end
     return true
 end
 

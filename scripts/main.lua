@@ -418,6 +418,39 @@ function UpdatePrepProgress()
 end
 
 -- ============================================================================
+-- 行动时间槽系统（每天3个行动槽，摆摊占满一整天）
+-- 槽1=上午9:00  槽2=下午13:00  槽3=晚上19:00
+-- 满3槽后推进一天，重置到次日9:00
+-- ============================================================================
+
+local TIME_SLOT_MINUTES = { 9 * 60, 13 * 60, 19 * 60 }
+
+--- 使用1个行动槽。满3槽时自动推进一天
+--- @return boolean true=本次调用触发了推进
+local function UseActionSlot()
+    gs.actionsToday = (gs.actionsToday or 0) + 1
+    -- 更新时段显示
+    local slotTime = TIME_SLOT_MINUTES[gs.actionsToday]
+    if slotTime then
+        gs.timeOfDayMinutes = slotTime
+    end
+    if gs.actionsToday >= 3 then
+        gs.actionsToday = 0
+        gs.timeOfDayMinutes = TIME_SLOT_MINUTES[1]
+        TimeSystem.advanceDay(gs, config)
+        return true
+    end
+    return false
+end
+
+--- 摆摊结束：占满全天，直接推进到次日
+local function UseFullDay()
+    gs.actionsToday = 0
+    gs.timeOfDayMinutes = TIME_SLOT_MINUTES[1]
+    TimeSystem.advanceDay(gs, config)
+end
+
+-- ============================================================================
 -- 行动处理（回合制核心）
 -- ============================================================================
 
@@ -430,6 +463,16 @@ function HandleAction(actionType, data)
 
     local success = false
     data = data or {}
+
+    -- 行动 → 场景事件上下文映射（用于 rollContextEvent）
+    local CONTEXT_MAP = {
+        rest          = "rest",
+        relax         = "relax",
+        feast         = "feast",
+        go_hospital   = "hospital",
+        go_pharmacy   = "pharmacy",
+    }
+    local actionContext = CONTEXT_MAP[actionType]
 
     -- === 摆摊状态机（不消耗回合的操作，优先处理） ===
     if actionType == "select_stall_item" then
@@ -461,10 +504,11 @@ function HandleAction(actionType, data)
         return
     elseif actionType == "close_stall" then
         StallSystem.closeStall(gs, config)
-        -- 收摊结束这一天，推进时间
+        -- 摆摊结束：收摊场景事件 + 全天推进
+        EventSystem.rollContextEvent(gs, config, "stall")
         EventSystem.rollEvent(gs, config)
         StallSystem.tickPromotion(gs, config)
-        TimeSystem.advanceDay(gs, config)
+        UseFullDay()
         SaveSystem.save()
         UpdateBGM()
         if gs.phase ~= "playing" then
@@ -521,7 +565,8 @@ function HandleAction(actionType, data)
                 if ok then
                     AudioManager.playSFX("audio/sfx/sfx_cash_register.ogg", 0.7)
                 end
-                -- 触发事件（摆摊期间不推进天数，收摊/休息才推进）
+                -- 叫卖中触发摊位场景事件（不推进天数，收摊才推进）
+                EventSystem.rollContextEvent(gs, config, gs.isLiveStreaming and "livestream" or "stall")
                 EventSystem.rollEvent(gs, config)
                 StallSystem.tickPromotion(gs, config)
                 SaveSystem.save()
@@ -584,10 +629,11 @@ function HandleAction(actionType, data)
         ShowSupermarketPopup()
         return
     elseif actionType == "leave_supermarket" then
-        -- 离开超市：推进时间
+        -- 离开超市：超市场景事件 + 消耗1个行动槽
+        EventSystem.rollContextEvent(gs, config, "supermarket")
         EventSystem.rollEvent(gs, config)
         StallSystem.tickPromotion(gs, config)
-        TimeSystem.advanceDay(gs, config)
+        UseActionSlot()
         SaveSystem.save()
         UpdateBGM()
         if gs.phase ~= "playing" then
@@ -624,9 +670,11 @@ function HandleAction(actionType, data)
                     end
                     gs.currentScene = "stall"
                     gs.currentActivity = "idle"
+                    -- 钓鱼场景事件 + 消耗1个行动槽
+                    EventSystem.rollContextEvent(gs, config, "fishing")
                     EventSystem.rollEvent(gs, config)
                     StallSystem.tickPromotion(gs, config)
-                    TimeSystem.advanceDay(gs, config)
+                    UseActionSlot()
                     SaveSystem.save()
                     UpdateBGM()
                     if gs.phase ~= "playing" then ShowEndScreen() end
@@ -647,14 +695,19 @@ function HandleAction(actionType, data)
     end
 
     if success then
-        -- 触发随机事件
+        -- 触发场景专属事件（如果有）
+        if actionContext then
+            EventSystem.rollContextEvent(gs, config, actionContext)
+        end
+
+        -- 触发全局随机事件
         EventSystem.rollEvent(gs, config)
 
         -- 促销天数扣减
         StallSystem.tickPromotion(gs, config)
 
-        -- 推进时间
-        TimeSystem.advanceDay(gs, config)
+        -- 消耗1个行动槽（满3槽时推进到次日）
+        UseActionSlot()
 
         -- 自动存档
         SaveSystem.save()

@@ -384,6 +384,316 @@ local EVENT_POOL = {
     },
 }
 
+-- ============================================================================
+-- 场景专属事件池（按活动类型触发，40% 概率）
+-- 场景: rest / relax / feast / hospital / pharmacy / supermarket / fishing / stall / livestream
+-- ============================================================================
+
+local CONTEXT_EVENTS = {
+    -- ---- 休息 ----
+    rest = {
+        { name = "睡了个好觉", desc = "一觉到天亮，精力完全恢复！", type = "positive", prob = 0.4,
+          apply = function(gs)
+            gs.energy = math.min(100, gs.energy + 35)
+            gs.health = math.min(100, (gs.health or 100) + 5)
+            gs.addMessage("睡眠质量极好！体力+35，健康+5", "success")
+          end },
+        { name = "失眠噩梦", desc = "睡前刷手机，辗转反侧，天亮了还是没睡好...", type = "negative", prob = 0.2,
+          apply = function(gs)
+            gs.energy = math.max(0, gs.energy - 15)
+            gs.mood = math.max(0, gs.mood - 12)
+            gs.addMessage("失眠！体力-15，心情-12", "warning")
+          end },
+        { name = "做了个好梦", desc = "梦见自己当了大老板，醒来心情特别好！", type = "positive", prob = 0.3,
+          apply = function(gs)
+            gs.mood = math.min(100, gs.mood + 20)
+            gs.addMessage("做了个好梦！心情+20", "success")
+          end },
+        { name = "灵感闪现", desc = "休息时突然想到了提高营业额的新办法！", type = "positive", prob = 0.1,
+          apply = function(gs)
+            local types = { "management", "marketing", "charm", "negotiation" }
+            local stype = types[math.random(1, #types)]
+            if gs.skills[stype] then
+                gs.skills[stype].xp = gs.skills[stype].xp + 60
+                gs.addMessage("灵感来了！相关技能经验+60", "success")
+            end
+          end },
+    },
+
+    -- ---- 放松 ----
+    relax = {
+        { name = "刷到干货视频", desc = "刷到一个厉害的营销课，偷偷学了干货！", type = "positive", prob = 0.35,
+          apply = function(gs)
+            local types = { "management", "marketing" }
+            local stype = types[math.random(1, #types)]
+            if gs.skills[stype] then
+                gs.skills[stype].xp = gs.skills[stype].xp + 80
+                gs.mood = math.min(100, gs.mood + 10)
+                gs.addMessage("学到干货！相关技能经验+80，心情+10", "success")
+            end
+          end },
+        { name = "不小心充值", desc = "刷着刷着手滑充了个大会员...", type = "negative", prob = 0.2,
+          apply = function(gs)
+            local cost = math.random(50, 200)
+            gs.cash = math.max(0, gs.cash - cost)
+            gs.mood = math.max(0, gs.mood - 5)
+            gs.addMessage(string.format("手滑充值 -$%d，后悔死了", cost), "warning")
+          end },
+        { name = "遇到老朋友", desc = "逛着逛着遇到了多年不见的老朋友，聊得很开心！", type = "positive", prob = 0.25,
+          apply = function(gs)
+            gs.mood = math.min(100, gs.mood + 22)
+            gs.addMessage("遇见老友，心情大好！心情+22", "success")
+          end },
+        { name = "看了励志片", desc = "看了部励志电影，重新燃起了斗志！", type = "positive", prob = 0.2,
+          apply = function(gs)
+            gs.mood = math.min(100, gs.mood + 15)
+            gs.energy = math.min(100, gs.energy + 10)
+            gs.addMessage("励志满满！心情+15，体力+10", "success")
+          end },
+    },
+
+    -- ---- 下馆子/大餐 ----
+    feast = {
+        { name = "偷师厨艺", desc = "在餐厅观察大厨手法，学到了不少烹饪技巧！", type = "positive", prob = 0.35,
+          apply = function(gs)
+            if gs.skills["cooking"] then
+                gs.skills["cooking"].xp = gs.skills["cooking"].xp + 100
+            end
+            gs.mood = math.min(100, gs.mood + 10)
+            gs.addMessage("学到厨艺！烹饪技能经验+100", "success")
+          end },
+        { name = "录了美食vlog", desc = "边吃边录，发了条美食探店视频，粉丝涨了！", type = "positive", prob = 0.3,
+          apply = function(gs)
+            local fanGain = math.random(30, 200)
+            local fameGain = math.random(15, 80)
+            gs.followers = gs.followers + fanGain
+            gs.fame = gs.fame + fameGain
+            gs.mood = math.min(100, gs.mood + 12)
+            gs.addMessage(string.format("美食vlog！涨粉%d，名气+%d", fanGain, fameGain), "success")
+          end },
+        { name = "吃坏肚子了", desc = "不知道吃了什么不新鲜的，晚上拉肚子...", type = "negative", prob = 0.15,
+          apply = function(gs)
+            gs.health = math.max(0, (gs.health or 100) - 15)
+            gs.energy = math.max(0, gs.energy - 20)
+            gs.mood = math.max(0, gs.mood - 10)
+            gs.addMessage("食物不洁！健康-15，体力-20，心情-10", "danger")
+          end },
+        { name = "遇到美食达人", desc = "餐厅遇到一位美食博主，互相加了微信！", type = "positive", prob = 0.2,
+          apply = function(gs)
+            local fameGain = math.random(20, 80)
+            gs.fame = gs.fame + fameGain
+            gs.mood = math.min(100, gs.mood + 15)
+            gs.addMessage(string.format("结交美食达人！名气+%d", fameGain), "success")
+          end },
+    },
+
+    -- ---- 去医院 ----
+    hospital = {
+        { name = "等待时间超长", desc = "医院人超多，等了两个多小时，体力大减...", type = "negative", prob = 0.3,
+          apply = function(gs)
+            gs.energy = math.max(0, gs.energy - 25)
+            gs.mood = math.max(0, gs.mood - 8)
+            gs.addMessage("排队耗尽体力！体力-25，心情-8", "warning")
+          end },
+        { name = "医生好建议", desc = "医生不仅治了病还给了很多养生建议，很有用！", type = "positive", prob = 0.35,
+          apply = function(gs)
+            gs.health = math.min(100, (gs.health or 100) + 15)
+            gs.mood = math.min(100, gs.mood + 10)
+            gs.addMessage("医生妙手回春！健康+15，心情+10", "success")
+          end },
+        { name = "检查出小毛病", desc = "顺带检查了一下，发现个小问题，多花了一笔...", type = "negative", prob = 0.2,
+          apply = function(gs)
+            local cost = math.random(500, 2000)
+            gs.cash = math.max(0, gs.cash - cost)
+            gs.mood = math.max(0, gs.mood - 5)
+            gs.addMessage(string.format("额外检查费 -$%d", cost), "warning")
+          end },
+        { name = "遇病友聊开了", desc = "和旁边的病友聊了很久，互相鼓励，心情反而好了！", type = "positive", prob = 0.15,
+          apply = function(gs)
+            gs.mood = math.min(100, gs.mood + 18)
+            gs.addMessage("与病友互励，心情+18", "success")
+          end },
+    },
+
+    -- ---- 去药店 ----
+    pharmacy = {
+        { name = "发现特效药", desc = "找到了对症的特效药，效果比普通药好多了！", type = "positive", prob = 0.35,
+          apply = function(gs)
+            gs.health = math.min(100, (gs.health or 100) + 10)
+            gs.addMessage("特效药！健康额外+10", "success")
+          end },
+        { name = "药品打折", desc = "今天药店搞活动，买一送一，省了不少！", type = "positive", prob = 0.25,
+          apply = function(gs)
+            local saving = math.random(50, 300)
+            gs.cash = gs.cash + saving
+            gs.mood = math.min(100, gs.mood + 8)
+            gs.addMessage(string.format("药品打折省了 +$%d", saving), "success")
+          end },
+        { name = "店员推销保健品", desc = "店员一直推销各种保健品，没买，但搞得很烦...", type = "negative", prob = 0.2,
+          apply = function(gs)
+            gs.mood = math.max(0, gs.mood - 8)
+            gs.addMessage("被保健品推销烦到了，心情-8", "warning")
+          end },
+        { name = "营业员给小贴士", desc = "好心的营业员教了你几个省钱买药的技巧！", type = "positive", prob = 0.2,
+          apply = function(gs)
+            gs.mood = math.min(100, gs.mood + 10)
+            gs.addMessage("学到了省钱技巧，心情+10", "success")
+          end },
+    },
+
+    -- ---- 超市 ----
+    supermarket = {
+        { name = "发现特价商品", desc = "超市今日特价，随手买了一堆好东西！", type = "positive", prob = 0.3,
+          apply = function(gs)
+            local saving = math.random(100, 500)
+            gs.cash = gs.cash + saving
+            gs.mood = math.min(100, gs.mood + 12)
+            gs.addMessage(string.format("捡漏特价！省了 +$%d", saving), "success")
+          end },
+        { name = "遇见老顾客", desc = "超市偶遇你的老顾客，当场推荐了好几个朋友关注你！", type = "positive", prob = 0.2,
+          apply = function(gs)
+            local fanGain = math.random(10, 60)
+            gs.followers = gs.followers + fanGain
+            gs.mood = math.min(100, gs.mood + 15)
+            gs.addMessage(string.format("老顾客帮推广！涨粉%d", fanGain), "success")
+          end },
+        { name = "结账长队", desc = "收银台排了超长的队，等得不耐烦了...", type = "negative", prob = 0.25,
+          apply = function(gs)
+            gs.energy = math.max(0, gs.energy - 10)
+            gs.mood = math.max(0, gs.mood - 8)
+            gs.addMessage("排队结账，体力-10，心情-8", "warning")
+          end },
+        { name = "买到食材新品", desc = "发现了一款新的食材，灵感大发！", type = "positive", prob = 0.25,
+          apply = function(gs)
+            gs.mood = math.min(100, gs.mood + 12)
+            local fameGain = math.random(10, 40)
+            gs.fame = gs.fame + fameGain
+            gs.addMessage(string.format("发现新食材！名气+%d", fameGain), "success")
+          end },
+    },
+
+    -- ---- 钓鱼 ----
+    fishing = {
+        { name = "钓到大鱼", desc = "运气爆棚！钓上来一条超大的鱼！", type = "positive", prob = 0.25,
+          apply = function(gs)
+            local bonus = math.random(3, 8)
+            gs.fishStock = (gs.fishStock or 0) + bonus
+            gs.mood = math.min(100, gs.mood + 20)
+            gs.addMessage(string.format("大鱼！额外获得%d条鱼！", bonus), "success")
+          end },
+        { name = "钓竿断了", desc = "用力过猛，钓竿突然断了，还损失了鱼饵...", type = "negative", prob = 0.2,
+          apply = function(gs)
+            local cost = math.random(100, 400)
+            gs.cash = math.max(0, gs.cash - cost)
+            gs.mood = math.max(0, gs.mood - 15)
+            gs.addMessage(string.format("钓竿断了！修理费 -$%d，心情-15", cost), "warning")
+          end },
+        { name = "直播钓鱼爆火", desc = "顺手开了直播，没想到钓鱼视频突然火了！", type = "positive", prob = 0.2,
+          apply = function(gs)
+            local fanGain = math.random(100, 600)
+            local fameGain = math.random(30, 150)
+            gs.followers = gs.followers + fanGain
+            gs.fame = gs.fame + fameGain
+            gs.mood = math.min(100, gs.mood + 18)
+            gs.addMessage(string.format("钓鱼直播爆火！涨粉%d，名气+%d", fanGain, fameGain), "success")
+          end },
+        { name = "钓友分享技巧", desc = "旁边的钓鱼高手传授了几招绝活！", type = "positive", prob = 0.2,
+          apply = function(gs)
+            gs.mood = math.min(100, gs.mood + 15)
+            gs.addMessage("学到钓鱼绝活，心情愉悦！心情+15", "success")
+          end },
+        { name = "风景怡人", desc = "湖边风景太美了，心情整个舒畅开来！", type = "positive", prob = 0.15,
+          apply = function(gs)
+            gs.mood = math.min(100, gs.mood + 18)
+            gs.energy = math.min(100, gs.energy + 10)
+            gs.addMessage("大自然治愈！心情+18，体力+10", "success")
+          end },
+    },
+
+    -- ---- 摆摊中 ----
+    stall = {
+        { name = "顾客排长龙", desc = "今天不知为何特别多人，生意超好！", type = "positive", prob = 0.25,
+          apply = function(gs)
+            local income = math.random(300, 1500)
+            gs.cash = gs.cash + income
+            gs.stallTrust = math.min(100, gs.stallTrust + 3)
+            gs.addMessage(string.format("排队抢购！额外收入 +$%d", income), "success")
+          end },
+        { name = "设备突然故障", desc = "炉子出了问题，急忙找人维修，耽误了生意...", type = "negative", prob = 0.2,
+          apply = function(gs)
+            local cost = math.random(200, 800)
+            gs.cash = math.max(0, gs.cash - cost)
+            gs.mood = math.max(0, gs.mood - 10)
+            gs.addMessage(string.format("设备故障！维修费 -$%d", cost), "warning")
+          end },
+        { name = "收到好评卡", desc = "顾客主动在手机上给了五星好评，口碑大涨！", type = "positive", prob = 0.25,
+          apply = function(gs)
+            local fameGain = math.random(15, 50)
+            gs.fame = gs.fame + fameGain
+            gs.stallTrust = math.min(100, gs.stallTrust + 5)
+            gs.mood = math.min(100, gs.mood + 12)
+            gs.addMessage(string.format("五星好评！名气+%d，口碑+5", fameGain), "success")
+          end },
+        { name = "老顾客带全家", desc = "一位老顾客带来了他全家来光顾！", type = "positive", prob = 0.3,
+          apply = function(gs)
+            local income = math.random(200, 800)
+            gs.cash = gs.cash + income
+            gs.stallTrust = math.min(100, gs.stallTrust + 4)
+            gs.addMessage(string.format("老顾客带全家！额外收入 +$%d，口碑+4", income), "success")
+          end },
+    },
+
+    -- ---- 直播中 ----
+    livestream = {
+        { name = "直播突然爆火", desc = "不知道哪来的流量，直播间突然涌入大量新观众！", type = "positive", prob = 0.2,
+          apply = function(gs)
+            local fanGain = math.random(200, 1500)
+            local fameGain = math.random(50, 200)
+            gs.followers = gs.followers + fanGain
+            gs.fame = gs.fame + fameGain
+            gs.mood = math.min(100, gs.mood + 20)
+            gs.addMessage(string.format("直播爆火！涨粉%d，名气+%d", fanGain, fameGain), "success")
+          end },
+        { name = "黑粉来刷屏", desc = "直播间突然来了一波黑粉，刷侮辱性弹幕...", type = "negative", prob = 0.2,
+          apply = function(gs)
+            local fameLoss = math.random(20, 80)
+            gs.fame = math.max(0, gs.fame - fameLoss)
+            gs.mood = math.max(0, gs.mood - 15)
+            gs.addMessage(string.format("黑粉入侵！名气-%d，心情-15", fameLoss), "danger")
+          end },
+        { name = "大V空降", desc = "一位百万大V意外进了你的直播间并@粉丝来看！", type = "positive", prob = 0.1,
+          apply = function(gs)
+            local fanGain = math.random(1000, 5000)
+            local fameGain = math.random(100, 400)
+            gs.followers = gs.followers + fanGain
+            gs.fame = gs.fame + fameGain
+            gs.mood = math.min(100, gs.mood + 25)
+            gs.addMessage(string.format("大V空降！涨粉%d，名气+%d！", fanGain, fameGain), "success")
+          end },
+        { name = "技术突然故障", desc = "直播时网络或设备出了问题，直播中断，损失大批观众！", type = "negative", prob = 0.15,
+          apply = function(gs)
+            local fanLoss = math.random(50, 300)
+            gs.followers = math.max(0, gs.followers - fanLoss)
+            gs.mood = math.max(0, gs.mood - 12)
+            gs.addMessage(string.format("直播故障！掉粉%d，心情-12", fanLoss), "warning")
+          end },
+        { name = "粉丝送大礼", desc = "一位铁粉在直播间连续打赏，说是给你鼓励！", type = "positive", prob = 0.2,
+          apply = function(gs)
+            local gift = math.random(300, 2000)
+            gs.cash = gs.cash + gift
+            gs.mood = math.min(100, gs.mood + 18)
+            gs.addMessage(string.format("粉丝打赏 +$%d！感动！", gift), "success")
+          end },
+        { name = "连麦互动超火", desc = "和观众连麦互动效果超好，直播间气氛很活跃！", type = "positive", prob = 0.15,
+          apply = function(gs)
+            local fameGain = math.random(30, 100)
+            gs.fame = gs.fame + fameGain
+            gs.mood = math.min(100, gs.mood + 12)
+            gs.addMessage(string.format("连麦互动！名气+%d", fameGain), "success")
+          end },
+    },
+}
+
 --- 本回合事件结果
 EventSystem.lastEvent = nil
 
@@ -425,6 +735,37 @@ function EventSystem.rollEvent(gs, config)
             local typeLabel = evt.type == "positive" and "success" or "warning"
             gs.addMessage("[事件] " .. evt.name .. "：" .. evt.desc, typeLabel)
             EventSystem.lastEvent = evt
+            return evt
+        end
+    end
+
+    return nil
+end
+
+--- 场景随机事件（40%概率，从指定场景的事件池中选取）
+--- @param gs table         游戏状态
+--- @param config table     游戏配置
+--- @param context string   场景标识：rest/relax/feast/hospital/pharmacy/supermarket/fishing/stall/livestream
+function EventSystem.rollContextEvent(gs, config, context)
+    local pool = CONTEXT_EVENTS[context]
+    if not pool or #pool == 0 then return nil end
+
+    if math.random() > 0.40 then return nil end
+
+    -- 加权随机
+    local totalProb = 0
+    for _, evt in ipairs(pool) do
+        totalProb = totalProb + evt.prob
+    end
+
+    local roll = math.random() * totalProb
+    local acc = 0
+    for _, evt in ipairs(pool) do
+        acc = acc + evt.prob
+        if roll <= acc then
+            evt.apply(gs)
+            local typeLabel = evt.type == "positive" and "success" or "warning"
+            gs.addMessage("[" .. context .. "] " .. evt.name .. "：" .. evt.desc, typeLabel)
             return evt
         end
     end

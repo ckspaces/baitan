@@ -65,7 +65,39 @@ function TopBar.create(gs, colors)
                     },
                 },
             },
-            -- 第二行：体力条 + 心情条
+            -- 第二行：时段 + 行动槽进度点
+            UI.Panel {
+                width = "100%",
+                flexDirection = "row",
+                alignItems = "center",
+                gap = 5,
+                children = {
+                    UI.Label {
+                        id = "timePeriodLabel",
+                        text = TopBar.getTimePeriodText(gs),
+                        fontSize = 10,
+                        fontColor = { 255, 220, 120, 255 },
+                        width = 44,
+                    },
+                    -- 行动槽点（3个小圆点）
+                    UI.Panel {
+                        flexDirection = "row",
+                        gap = 4,
+                        alignItems = "center",
+                        children = TopBar.buildSlotDots(gs, colors),
+                    },
+                    UI.Label {
+                        id = "slotHintLabel",
+                        text = (gs.actionsToday or 0) >= 2 and "次日" or "行动槽",
+                        fontSize = 8,
+                        fontColor = (gs.actionsToday or 0) >= 2
+                            and { 255, 140, 60, 255 }
+                            or  { 110, 120, 150, 255 },
+                        marginLeft = 2,
+                    },
+                },
+            },
+            -- 第三行：体力条 + 心情条
             UI.Panel {
                 width = "100%",
                 flexDirection = "row",
@@ -151,6 +183,32 @@ function TopBar.getWeatherText(gs)
     return string.format("%s%s %s%s", sEmoji, sName, wEmoji, wName)
 end
 
+--- 获取时段文本（根据 actionsToday）
+function TopBar.getTimePeriodText(gs)
+    local n = gs.actionsToday or 0
+    if n == 0 then return "☀️上午"
+    elseif n == 1 then return "🌤️下午"
+    else return "🌙晚上" end
+end
+
+--- 构建行动槽点组件（3个点，已用=亮色，未用=暗色）
+function TopBar.buildSlotDots(gs, colors)
+    local n = gs.actionsToday or 0
+    local dots = {}
+    for i = 1, 3 do
+        local used = i <= n
+        dots[i] = UI.Panel {
+            id = "slotDot" .. i,
+            width = 8, height = 8,
+            borderRadius = 4,
+            backgroundColor = used
+                and { 255, 200, 60, 255 }
+                or  { 60, 70, 95, 255 },
+        }
+    end
+    return dots
+end
+
 --- 刷新顶栏数据
 function TopBar.refresh(uiRoot, gs, colors)
     local dateLabel = uiRoot:FindById("dateLabel")
@@ -176,6 +234,34 @@ function TopBar.refresh(uiRoot, gs, colors)
 
     local sickLabel = uiRoot:FindById("sickLabel")
     if sickLabel then sickLabel:SetText(gs.isSick and "🤒生病中" or "") end
+
+    -- 时段标签 + 行动槽点刷新
+    local timePeriodLabel = uiRoot:FindById("timePeriodLabel")
+    if timePeriodLabel then timePeriodLabel:SetText(TopBar.getTimePeriodText(gs)) end
+
+    local slotHintLabel = uiRoot:FindById("slotHintLabel")
+    if slotHintLabel then
+        local n = gs.actionsToday or 0
+        slotHintLabel:SetText(n >= 2 and "→次日" or "行动槽")
+        slotHintLabel:SetStyle({
+            fontColor = n >= 2
+                and { 255, 140, 60, 255 }
+                or  { 110, 120, 150, 255 },
+        })
+    end
+
+    -- 更新3个行动槽圆点颜色
+    local n = gs.actionsToday or 0
+    for i = 1, 3 do
+        local dot = uiRoot:FindById("slotDot" .. i)
+        if dot then
+            dot:SetStyle({
+                backgroundColor = i <= n
+                    and { 255, 200, 60, 255 }
+                    or  { 60, 70, 95, 255 },
+            })
+        end
+    end
 end
 
 return TopBar
