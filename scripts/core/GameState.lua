@@ -131,6 +131,9 @@ function GameState.init(config)
     GameState.isSick = false          -- 是否生病
     GameState.sickDays = 0            -- 已生病天数
 
+    -- === 钓鱼库存 ===
+    GameState.fishStock = 0             -- 鱼库存（钓鱼获得，用于摆摊烤鱼）
+
     -- 待处理的微信事件（弹窗用）
     GameState.pendingWechatEvent = nil
 
@@ -296,6 +299,8 @@ function GameState.toSaveData()
     data.promotionCooldown = GameState.promotionCooldown
     data.supermarketPurchasesToday = GameState.supermarketPurchasesToday
     data.lastFinancialWarningLevel = GameState.lastFinancialWarningLevel
+    -- 钓鱼
+    data.fishStock = GameState.fishStock
     -- 状态
     data.currentScene = GameState.currentScene
     data.phase = GameState.phase
@@ -375,6 +380,8 @@ function GameState.fromSaveData(data)
     GameState.lastViralEvent = nil
     GameState.animTime = 0
     GameState.currentActivity = "idle"
+    -- 兼容旧存档（无钓鱼字段时默认为0）
+    if GameState.fishStock == nil then GameState.fishStock = 0 end
     return true
 end
 

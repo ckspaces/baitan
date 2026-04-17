@@ -88,17 +88,18 @@ function StallSystem.getTrustInfo(gs, config)
     return info
 end
 
-local function getSlotWindowInfo(gs, loc)
-    local usedSlots = gs.stallTimeSlot or 0
-    local maxSlots = loc and (loc.maxSlots or 5) or 5
-    local actionSlot = usedSlots + 1
-    return {
-        usedSlots = usedSlots,
-        maxSlots = maxSlots,
-        actionSlot = actionSlot,
-        isTailSlot = actionSlot == maxSlots,
-        isOverSlot = actionSlot > maxSlots,
-    }
+--- 根据当前游戏时刻返回客流系数（越晚人越少）
+local function getTimeOfDayTrafficMult(gs)
+    local t = gs.timeOfDayMinutes or 0
+    if t < 900 then        -- 15:00 之前：早高峰全开
+        return 1.0
+    elseif t < 1080 then   -- 15:00-18:00：下午稳定
+        return 0.85
+    elseif t < 1170 then   -- 18:00-19:30：傍晚回落
+        return 0.60
+    else                   -- 19:30-21:00：夜晚冷清
+        return 0.35
+    end
 end
 
 --- 计算被动销售量（根据信任度线性插值 + 地点客流 + 促销加成）
@@ -147,15 +148,8 @@ function StallSystem.calcPassiveSales(gs, config)
     local fameCustomers = StallSystem.calcFameCustomers(gs, config)
     baseSales = baseSales + fameCustomers
 
-    -- 时段超时衰减（超过 maxSlots 后客流大幅下降）
-    if loc then
-        local slotInfo = getSlotWindowInfo(gs, loc)
-        if slotInfo.isOverSlot then
-            baseSales = math.floor(baseSales * 0.30)
-        elseif slotInfo.isTailSlot then
-            baseSales = math.floor(baseSales * 0.70)
-        end
-    end
+    -- 时间衰减：越晚人越少
+    baseSales = math.floor(baseSales * getTimeOfDayTrafficMult(gs))
 
     return math.max(0, baseSales)
 end
@@ -180,14 +174,8 @@ function StallSystem.calcNaturalSales(gs, config)
     end
     base = base + math.max(1, math.floor(fameCustomers * 0.35))
 
-    if loc then
-        local slotInfo = getSlotWindowInfo(gs, loc)
-        if slotInfo.isOverSlot then
-            base = math.max(0, math.floor(base * 0.35))
-        elseif slotInfo.isTailSlot then
-            base = math.max(0, math.floor(base * 0.70))
-        end
-    end
+    -- 时间衰减：越晚人越少
+    base = math.floor(base * getTimeOfDayTrafficMult(gs))
 
     if gs.currentWeather == "rainy" or gs.currentWeather == "stormy" then
         base = math.max(0, math.floor(base * 0.70))
@@ -232,17 +220,24 @@ function StallSystem.getTrafficSnapshot(gs, config)
                 end
             end
         end
-
-        local slotInfo = getSlotWindowInfo(gs, loc)
-        if slotInfo.isOverSlot then
-            warnings[#warnings + 1] = "已过营业高峰"
-            score = score - 20
-        elseif slotInfo.isTailSlot then
-            warnings[#warnings + 1] = "高峰尾段"
-            score = score - 8
-        end
     else
         reasons[#reasons + 1] = "基础路过客流"
+    end
+
+    -- 时间段客流状态
+    local timeMult = getTimeOfDayTrafficMult(gs)
+    if timeMult >= 1.0 then
+        reasons[#reasons + 1] = "正值上午旺时"
+        score = score + 10
+    elseif timeMult >= 0.85 then
+        reasons[#reasons + 1] = "下午客流稳定"
+        score = score + 5
+    elseif timeMult >= 0.60 then
+        warnings[#warnings + 1] = "傍晚客流回落"
+        score = score - 8
+    else
+        warnings[#warnings + 1] = "夜晚人少了"
+        score = score - 18
     end
 
     local trust = gs.stallTrust or 0
@@ -597,13 +592,32 @@ function StallSystem.openStall(gs, config)
         gs.addMessage("请先选择商品！", "warning")
         return false
     end
+    -- 检查需要鱼库存的商品（烤鱼等）
+    if item.requiresFish then
+        local needed = item.fishNeeded or 1
+        if (gs.fishStock or 0) < needed then
+            gs.addMessage(string.format(
+                "做%s需要%d条鱼，当前库存%d条，先去钓鱼吧！🎣",
+                item.name, needed, gs.fishStock or 0), "warning")
+            return false
+        end
+    end
+
     if gs.cash < item.batchCost then
         gs.addMessage(string.format("进货成本不足！需要 $%d", item.batchCost), "warning")
         return false
     end
 
     -- 扣进货成本
-    addStallCash(gs, -item.batchCost, 'stock', '进货')
+    if item.batchCost > 0 then
+        addStallCash(gs, -item.batchCost, 'stock', '进货')
+    end
+    -- 扣鱼库存
+    if item.requiresFish then
+        local needed = item.fishNeeded or 1
+        gs.fishStock = gs.fishStock - needed
+        gs.addMessage(string.format("消耗%d条新鲜鱼作为食材 🐟", needed), "info")
+    end
 
     -- 扣地点租金
     local loc = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
@@ -1388,9 +1402,7 @@ function StallSystem.updateRealtime(gs, config, dt)
     end
 
     local modeMult = 1.0
-    if mode == 'observe' then
-        modeMult = 1.2
-    elseif mode == 'hawk' then
+    if mode == 'hawk' then
         modeMult = 1.5
     end
 
@@ -1414,8 +1426,7 @@ function StallSystem.updateRealtime(gs, config, dt)
     gs.stallNaturalSold = math.max(0, units - gs.stallPassiveSold)
     gs.stallPassiveEarned = math.floor(income * (gs.stallPassiveSold / math.max(1, units)))
     gs.stallNaturalEarned = math.max(0, income - gs.stallPassiveEarned)
-    gs.stallTimeSlot = (gs.stallTimeSlot or 0) + 1
-
+    gs.stallTimeSlot = (gs.stallTimeSlot or 0) + 1  -- 保留字段兼容旧存档，不再作为限制依据
     gs.equipmentWear = math.min(100, (gs.equipmentWear or 0) + (mode == 'hawk' and 2 or 1))
     if (gs.equipmentWear or 0) >= 100 then
         local repairCost = math.max(60, math.floor(item.batchCost * 0.4))

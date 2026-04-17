@@ -1117,6 +1117,45 @@ function BottomActions.buildLifeTab(gs, config, colors, callbacks)
         },
     }
 
+    -- 钓鱼库存提示（有鱼时显示）
+    if (gs.fishStock or 0) > 0 then
+        children[#children + 1] = UI.Panel {
+            width = "100%", padding = 6,
+            backgroundColor = { 18, 45, 75, 210 }, borderRadius = 6,
+            borderWidth = 1, borderColor = { 60, 170, 220, 160 },
+            flexDirection = "row", alignItems = "center", gap = 6,
+            children = {
+                UI.Label { text = "🐟", fontSize = 18 },
+                UI.Panel {
+                    flex = 1, flexDirection = "column", gap = 1,
+                    children = {
+                        UI.Label {
+                            text = string.format("鱼库存: %d 条", gs.fishStock),
+                            fontSize = 11, fontColor = { 150, 225, 255, 255 },
+                        },
+                        UI.Label {
+                            text = "可选烤鱼摆摊，每条鱼可做3份",
+                            fontSize = 9, fontColor = { 120, 180, 210, 200 },
+                        },
+                    },
+                },
+            },
+        }
+    end
+
+    -- 钓鱼按钮
+    do
+        local F = config.Fishing
+        local canFish = gs.energy >= F.ENERGY_COST
+        children[#children + 1] = BottomActions.lifeButton(
+            "🎣 去钓鱼",
+            string.format("体力-%d · 心情+%d · 获得烤鱼食材", F.ENERGY_COST, F.MOOD_GAIN),
+            "go_fishing",
+            canFish,
+            colors,
+            callbacks)
+    end
+
     -- 原有生活选项
     children[#children + 1] = BottomActions.lifeButton("休息", "恢复体力+"..config.Rest.ENERGY_GAIN.." 心情+"..config.Rest.MOOD_GAIN,
         "rest", true, colors, callbacks)

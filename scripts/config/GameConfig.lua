@@ -63,6 +63,15 @@ GameConfig.Relax = {
     CASH_COST = 200,
 }
 
+-- 钓鱼
+GameConfig.Fishing = {
+    ENERGY_COST = 15,
+    MOOD_GAIN = 20,
+    DURATION_MINUTES = 30,
+    MAX_FISH_PER_SESSION = 3,
+    FISH_CATCH_BASE_RATE = 0.6,
+}
+
 -- ============================================================================
 -- 主业升级系统（4级线性递进）
 -- ============================================================================
@@ -127,6 +136,11 @@ GameConfig.StallItems = {
     { id = "tea",     name = "奶茶",   emoji = "🧋",
       batchCost = 20,  yield = 15, unitPrice = 10, salesRange = { 8, 18 },
       energyCost = 4,  moodCost = 1,  unlockMonth = 1, unlockDay = 14, skillReq = { marketing = 1 } },
+    { id = "grilled_fish", name = "烤鱼", emoji = "🐟",
+      batchCost = 0,   yield = 3,  unitPrice = 35, salesRange = { 2, 5 },
+      energyCost = 15, moodCost = 2,  unlockMonth = 1, unlockDay = 0, skillReq = {},
+      requiresFish = true, fishNeeded = 1,
+      desc = "新鲜钓来的鱼现烤，香气四溢" },
 }
 
 -- ============================================================================

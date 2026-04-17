@@ -112,6 +112,20 @@ function PlayerSystem.goSupermarket(gs, config)
     return true
 end
 
+--- 去钓鱼（消耗体力，进入钓鱼场景，通过 FishingMiniGame 获得鱼）
+function PlayerSystem.goFishing(gs, config)
+    local F = config.Fishing
+    if gs.energy < F.ENERGY_COST then
+        gs.addMessage(string.format("体力不足！钓鱼需要体力 %d，先去休息一下吧", F.ENERGY_COST), "warning")
+        return false
+    end
+    gs.energy = gs.energy - F.ENERGY_COST
+    gs.currentScene = "fishing"
+    gs.currentActivity = "fishing"
+    gs.addMessage(string.format("拿上鱼竿去湖边，消耗体力%d", F.ENERGY_COST), "info")
+    return true
+end
+
 --- 在超市购买商品
 function PlayerSystem.buyFromSupermarket(gs, config, itemId)
     local S = config.Supermarket

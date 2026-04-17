@@ -21,6 +21,7 @@ local SaveSystem = require("core.SaveSystem")
 local UIManager = require("ui.UIManager")
 local SceneRenderer = require("scenes.SceneRenderer")
 local GrillMiniGame = require("ui.GrillMiniGame")
+local FishingMiniGame = require("ui.FishingMiniGame")
 
 -- 注册所有场景
 local ShopScene = require("scenes.ShopScene")
@@ -30,6 +31,7 @@ local DapaidangScene = require("scenes.DapaidangScene")
 local HotelScene = require("scenes.HotelScene")
 local PharmacyScene = require("scenes.PharmacyScene")
 local SupermarketScene = require("scenes.SupermarketScene")
+local FishingScene    = require("scenes.FishingScene")
 
 SceneRenderer.register("shop", ShopScene)
 SceneRenderer.register("rest", RestScene)
@@ -38,6 +40,7 @@ SceneRenderer.register("dapaidang", DapaidangScene)
 SceneRenderer.register("hotel", HotelScene)
 SceneRenderer.register("pharmacy", PharmacyScene)
 SceneRenderer.register("supermarket", SupermarketScene)
+SceneRenderer.register("fishing",     FishingScene)
 
 -- ============================================================================
 -- 全局状态
@@ -609,6 +612,44 @@ function HandleAction(actionType, data)
         UIManager.refresh(gs, config, { onAction = HandleAction })
         if gs.pendingWechatEvent and gs.phase == "playing" then
             ShowWechatEventPopup(gs.pendingWechatEvent)
+        end
+        return
+    elseif actionType == "go_fishing" then
+        local ok = PlayerSystem.goFishing(gs, config)
+        if ok then
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            local root = UIManager.getRoot()
+            if root then
+                FishingMiniGame.show(root, config.Fishing, function(fishCaught, summaryText)
+                    if fishCaught > 0 then
+                        gs.fishStock = (gs.fishStock or 0) + fishCaught
+                        gs.mood = math.min(config.Player.MAX_MOOD,
+                            gs.mood + config.Fishing.MOOD_GAIN)
+                        gs.addMessage(string.format("🎣 %s，获得%d条鱼，心情+%d",
+                            summaryText, fishCaught, config.Fishing.MOOD_GAIN), "success")
+                        gs.addLog(string.format("去湖边钓鱼，获得%d条鱼", fishCaught), "info")
+                    else
+                        local moodGain = math.floor(config.Fishing.MOOD_GAIN * 0.4)
+                        gs.mood = math.min(config.Player.MAX_MOOD, gs.mood + moodGain)
+                        gs.addMessage(string.format("🎣 %s，享受了户外时光，心情+%d",
+                            summaryText, moodGain), "info")
+                    end
+                    gs.currentScene = "stall"
+                    gs.currentActivity = "idle"
+                    EventSystem.rollEvent(gs, config)
+                    StallSystem.tickPromotion(gs, config)
+                    TimeSystem.advanceDay(gs, config)
+                    SaveSystem.save()
+                    UpdateBGM()
+                    if gs.phase ~= "playing" then ShowEndScreen() end
+                    UIManager.refresh(gs, config, { onAction = HandleAction })
+                    if gs.pendingWechatEvent and gs.phase == "playing" then
+                        ShowWechatEventPopup(gs.pendingWechatEvent)
+                    end
+                end)
+            end
+        else
+            UIManager.refresh(gs, config, { onAction = HandleAction })
         end
         return
     elseif actionType == "repay" then
