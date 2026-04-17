@@ -737,16 +737,40 @@ function BottomActions.buildItemSelector(gs, config, colors, callbacks)
         local unlock = ProgressionSystem.getItemUnlockStatus(gs, config, i, items)
 
         if unlock.unlocked then
-            -- 已解锁：正常显示
-            btns[#btns + 1] = UI.Button {
-                text = item.emoji .. "\n" .. item.name,
-                flex = 1, fontSize = 9, height = 38,
-                variant = isSelected and "primary" or "ghost",
+            -- 已解锁：图片卡片显示
+            btns[#btns + 1] = UI.Panel {
+                flex = 1, height = 56,
+                backgroundColor = isSelected and { 30, 60, 180, 180 } or { 15, 20, 40, 210 },
+                borderRadius = 6,
+                borderWidth = isSelected and 2 or 1,
+                borderColor = isSelected and { 100, 160, 255, 255 } or { 55, 60, 90, 160 },
+                flexDirection = "column",
+                alignItems = "center",
+                justifyContent = "flex-end",
+                overflow = "hidden",
+                backgroundImage = item.image,
+                backgroundFit = "contain",
                 onClick = function(self)
                     if callbacks.onAction then
                         callbacks.onAction("select_stall_item", { index = i })
                     end
                 end,
+                children = {
+                    UI.Panel {
+                        width = "100%",
+                        paddingTop = 2, paddingBottom = 2,
+                        backgroundColor = isSelected and { 30, 80, 220, 210 } or { 0, 0, 0, 165 },
+                        children = {
+                            UI.Label {
+                                text = item.name,
+                                fontSize = 8,
+                                fontColor = { 255, 255, 255, 255 },
+                                textAlign = "center",
+                                width = "100%",
+                            },
+                        },
+                    },
+                },
             }
         else
             -- 锁定态：半透明遮罩 + 解锁条件
@@ -779,13 +803,16 @@ function BottomActions.buildItemSelector(gs, config, colors, callbacks)
             local progressPct = total > 0 and math.floor(progress / total * 100) or 0
 
             btns[#btns + 1] = UI.Panel {
-                flex = 1, height = 38,
-                backgroundColor = { 20, 22, 35, 180 },
-                borderRadius = 4,
-                borderWidth = 1, borderColor = { 60, 60, 80, 120 },
+                flex = 1, height = 56,
+                backgroundColor = { 10, 12, 22, 230 },
+                borderRadius = 6,
+                borderWidth = 1, borderColor = { 50, 52, 72, 120 },
                 justifyContent = "center",
                 alignItems = "center",
                 overflow = "hidden",
+                backgroundImage = item.image,
+                backgroundFit = "contain",
+                imageTint = { 55, 60, 80, 150 },
                 children = {
                     -- 锁定图标 + 条件文字
                     UI.Label {
