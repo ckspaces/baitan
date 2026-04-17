@@ -62,10 +62,15 @@ function ProgressionSystem.getItemUnlockStatus(gs, config, index, items)
     end
 
     local skillOk = gs.meetsSkillReq(item.skillReq)
+    local monthReq = item.unlockMonth or 1
+    local monthOk = (gs.currentMonth or 1) >= monthReq
+
     if index == 1 then
         return {
-            unlocked = skillOk,
+            unlocked = skillOk and monthOk,
             skillOk = skillOk,
+            monthOk = monthOk,
+            monthReq = monthReq,
             requiredXP = 0,
             currentXP = 0,
             previousItem = nil,
@@ -77,8 +82,10 @@ function ProgressionSystem.getItemUnlockStatus(gs, config, index, items)
     local currentXP = previousItem and ProgressionSystem.getItemProgress(gs, previousItem.id) or 0
 
     return {
-        unlocked = skillOk and currentXP >= requiredXP,
+        unlocked = skillOk and monthOk and currentXP >= requiredXP,
         skillOk = skillOk,
+        monthOk = monthOk,
+        monthReq = monthReq,
         requiredXP = requiredXP,
         currentXP = currentXP,
         previousItem = previousItem,

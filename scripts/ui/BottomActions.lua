@@ -626,18 +626,12 @@ end
 --- 商品选择器（横排按钮，适配批次模型，渐进解锁 + 锁定态UI）
 function BottomActions.buildItemSelector(gs, config, colors, callbacks)
     local items = ProgressionSystem.getCurrentItems(gs, config)
-    local stallDays = gs.stallDayCount or 0
     local btns = {}
     for i, item in ipairs(items) do
         local isSelected = (gs.selectedStallItem == i)
-        local dayReq = item.unlockDay or 0
-        local monthReq = item.unlockMonth or 1
-        local dayOk = stallDays >= dayReq
-        local monthOk = gs.currentMonth >= monthReq
-        local skillOk = gs.meetsSkillReq(item.skillReq)
-        local unlocked = dayOk and monthOk and skillOk
+        local unlock = ProgressionSystem.getItemUnlockStatus(gs, config, i, items)
 
-        if unlocked then
+        if unlock.unlocked then
             -- 已解锁：正常显示
             btns[#btns + 1] = UI.Button {
                 text = item.emoji .. "\n" .. item.name,
@@ -652,13 +646,13 @@ function BottomActions.buildItemSelector(gs, config, colors, callbacks)
         else
             -- 锁定态：半透明遮罩 + 解锁条件
             local reasons = {}
-            if not monthOk then
-                reasons[#reasons + 1] = string.format("第%d月", monthReq)
+            if not unlock.monthOk then
+                reasons[#reasons + 1] = string.format("第%d月", unlock.monthReq or 1)
             end
-            if not dayOk then
-                reasons[#reasons + 1] = string.format("摆摊%d天", dayReq)
+            if unlock.previousItem and (unlock.currentXP or 0) < (unlock.requiredXP or 0) then
+                reasons[#reasons + 1] = string.format("%s %d/%d", unlock.previousItem.name, unlock.currentXP or 0, unlock.requiredXP or 0)
             end
-            if not skillOk and item.skillReq then
+            if not unlock.skillOk and item.skillReq then
                 for skill, lvl in pairs(item.skillReq) do
                     local sname = config.Skills.NAMES[skill] or skill
                     reasons[#reasons + 1] = string.format("%sLv%d", sname, lvl)
@@ -666,16 +660,16 @@ function BottomActions.buildItemSelector(gs, config, colors, callbacks)
             end
             local reasonStr = table.concat(reasons, "\n")
 
-            -- 计算解锁进度（综合进度百分比）
+            -- 计算解锁进度（以上一个商品熟练度为主）
             local progress = 0
             local total = 0
-            if dayReq > 0 then
+            if (unlock.requiredXP or 0) > 0 then
                 total = total + 1
-                progress = progress + math.min(1, stallDays / dayReq)
+                progress = progress + math.min(1, (unlock.currentXP or 0) / unlock.requiredXP)
             end
-            if monthReq > 1 then
+            if (unlock.monthReq or 1) > 1 then
                 total = total + 1
-                progress = progress + math.min(1, gs.currentMonth / monthReq)
+                progress = progress + math.min(1, (gs.currentMonth or 1) / unlock.monthReq)
             end
             local progressPct = total > 0 and math.floor(progress / total * 100) or 0
 

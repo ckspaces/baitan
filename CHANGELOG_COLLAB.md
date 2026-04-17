@@ -83,3 +83,21 @@
 - Details: retained the shared project map, workflow notes, and log template for future work
 - Risk: none at runtime
 - Validation: documentation reviewed
+
+- File: `scripts/core/ProgressionSystem.lua`
+- Purpose: switch stall item unlock checks from stall-day gating to previous-item mastery gating
+- Details: item unlock status now combines month and skill checks with previous item xp thresholds instead of `unlockDay`
+- Risk: existing saves may suddenly reveal or hide items differently based on accumulated per-item xp
+- Validation: helper output reviewed against the item selector and stall item selection flow
+
+- File: `scripts/core/StallSystem.lua`
+- Purpose: make item progression actually advance through gameplay
+- Details: blocked selecting locked items in backend, granted craft xp on opening a stall, and granted sale xp on hawk and wait sales
+- Risk: progression speed now depends on yield and sold units, so tuning may still need a balance pass
+- Validation: xp award points reviewed across open, hawk, and wait flows
+
+- File: `scripts/ui/BottomActions.lua`
+- Purpose: update item lock UI to show mastery-based unlock progress
+- Details: replaced stall-day lock text with previous-item xp progress and wired the lock bar to the mastery requirement
+- Risk: lock labels may need a short wording polish in narrow layouts
+- Validation: item selector no longer references stall-day unlock variables

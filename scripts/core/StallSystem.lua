@@ -8,6 +8,13 @@ local ProgressionSystem = require("core.ProgressionSystem")
 
 local StallSystem = {}
 
+local function addItemProgress(gs, itemId, amount)
+    if not itemId or amount <= 0 then return 0 end
+    gs.itemProgress = gs.itemProgress or {}
+    gs.itemProgress[itemId] = (gs.itemProgress[itemId] or 0) + amount
+    return gs.itemProgress[itemId]
+end
+
 --- 上次事件结果
 StallSystem.lastStallEvent = nil
 
@@ -227,6 +234,18 @@ function StallSystem.selectItem(gs, index, config)
         return false
     end
     local item = items[index]
+    local unlock = ProgressionSystem.getItemUnlockStatus(gs, config, index, items)
+    if not unlock.unlocked then
+        if not unlock.monthOk then
+            gs.addMessage(string.format("%s 需要第%d月才能解锁", item.name, unlock.monthReq or 1), "warning")
+            return false
+        end
+        if unlock.previousItem and (unlock.currentXP or 0) < (unlock.requiredXP or 0) then
+            gs.addMessage(string.format("%s 需要先把 %s 熟练到 %d/%d", item.name,
+                unlock.previousItem.name, unlock.currentXP or 0, unlock.requiredXP or 0), "warning")
+            return false
+        end
+    end
     if not gs.meetsSkillReq(item.skillReq) then
         gs.addMessage(string.format("%s 技能不满足要求", item.name), "warning")
         return false
@@ -318,6 +337,11 @@ function StallSystem.openStall(gs, config)
     gs.addMessage(string.format("当前口碑: %s%s（信任度%d）",
         trustInfo.emoji, trustInfo.name, gs.stallTrust or 0), "info")
 
+    local craftXP = math.max(0, ((config.RecipeProgression or {}).XP_PER_CRAFT or 0) * (item.yield or 0))
+    if craftXP > 0 then
+        addItemProgress(gs, item.id, craftXP)
+    end
+
     -- 显示促销信息
     local promo = StallSystem.getActivePromotionConfig(gs, config)
     if promo and gs.activePromotion then
@@ -372,6 +396,12 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
     local passiveUnits, passiveIncome = StallSystem.doPassiveSales(gs, config, item, modifier * grillMult)
     gs.stallPassiveSold = passiveUnits
     gs.stallPassiveEarned = passiveIncome
+
+    local recipeCfg = config.RecipeProgression or {}
+    local passiveXP = math.max(0, (recipeCfg.XP_PER_SALE or 0) * passiveUnits)
+    if passiveXP > 0 then
+        addItemProgress(gs, item.id, passiveXP)
+    end
 
     -- === 2. 主动叫卖销售（渐进式：1-3位顾客，每人买1-3份） ===
     local maxCanSell = gs.stallInventory  -- 被动已扣，这里是剩余库存
@@ -450,6 +480,12 @@ function StallSystem.hawkSell(gs, config, grillMultiplier)
     gs.stallTotalSold = gs.stallTotalSold + unitsSold
     gs.stallTotalEarned = gs.stallTotalEarned + income
     gs.cash = gs.cash + income
+
+    local recipeCfg = config.RecipeProgression or {}
+    local activeXP = math.max(0, (recipeCfg.XP_PER_SALE or 0) * unitsSold)
+    if activeXP > 0 then
+        addItemProgress(gs, item.id, activeXP)
+    end
 
     -- 直播额外涨粉
     if gs.isLiveStreaming then
@@ -575,6 +611,11 @@ function StallSystem.waitObserve(gs, config)
     local passiveUnits, passiveIncome = StallSystem.doPassiveSales(gs, config, item, modifier)
     gs.stallPassiveSold = passiveUnits
     gs.stallPassiveEarned = passiveIncome
+
+    local waitXP = math.max(0, ((config.RecipeProgression or {}).XP_PER_SALE or 0) * passiveUnits)
+    if waitXP > 0 then
+        addItemProgress(gs, item.id, waitXP)
+    end
 
     -- === 信任度微涨（等待也能跟路人打招呼） ===
     local trustGain = math.random(T.WAIT_TRUST_GAIN[1], T.WAIT_TRUST_GAIN[2])
