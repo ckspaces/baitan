@@ -172,6 +172,19 @@ GameConfig.StallEvents = {
     { id = "bigorder",  name = "大客户上门",   type = "positive", prob = 0.10, desc = "有人一口气买了很多！收入翻倍", effect = "double_income" },
     { id = "praise",    name = "好评如潮",     type = "positive", prob = 0.08, desc = "顾客纷纷好评，声望大涨！",     effect = "reputation_up" },
     { id = "influencer",name = "网红路过",     type = "positive", prob = 0.05, desc = "网红拍了你的摊位，涨粉了！",   effect = "fans_up" },
+
+    -- 新增摆摊事件
+    { id = "snow",      name = "下大雪了",    type = "negative", prob = 0.06, desc = "大雪飘飘，路上没人了，生意惨淡", effect = "half_income" },
+    { id = "wind",      name = "大风刮摊",    type = "negative", prob = 0.08, desc = "大风把展示物吹翻，忙着收拾没顾客", effect = "half_income" },
+    { id = "blackout",  name = "周边停电",    type = "negative", prob = 0.06, desc = "附近突然停电，天黑客人全跑了！",   effect = "half_income" },
+    { id = "gas_issue", name = "煤气报警",    type = "negative", prob = 0.05, desc = "设备发出警报，被迫中止营业修理",   effect = "repair_cost" },
+    { id = "lowprice",  name = "隔壁大甩卖",  type = "negative", prob = 0.08, desc = "对面摊位搞降价活动，你的客人被抢走", effect = "reduce_30" },
+    { id = "peakhour",  name = "黄金时段",    type = "positive", prob = 0.08, desc = "晚高峰人特别多，排队买买买！",     effect = "double_income" },
+    { id = "school_out",name = "学生放学潮",  type = "positive", prob = 0.07, desc = "附近学校放学，学生蜂拥而来！",     effect = "double_income" },
+    { id = "short_video",name = "被拍短视频", type = "positive", prob = 0.06, desc = "路人把你摊位拍下来发网上，涨粉！", effect = "fans_up" },
+    { id = "sample_success", name = "试吃大成功", type = "positive", prob = 0.07, desc = "发出去的试吃让一大波人回来下单！", effect = "double_income" },
+    { id = "vip_customer",   name = "大V顾客",     type = "positive", prob = 0.04, desc = "一位有影响力的大V来吃并发帖推荐！", effect = "fans_up" },
+    { id = "community_event",name = "社区活动",    type = "positive", prob = 0.05, desc = "社区举办活动，周边客流量暴增！",    effect = "reputation_up" },
 }
 
 -- ============================================================================
@@ -451,6 +464,167 @@ GameConfig.WechatEvents = {
             choices = {
                 { text = "这是诈骗！拉黑", effect = "block",   moodChange = 2,   repChange = 1 },
                 { text = "居然信了…转账", effect = "scammed",  moodChange = -30, repChange = 0 },
+            },
+        },
+        -- 老妈汇款慰问
+        {
+            id = "mom_support",
+            sender = "老妈",
+            avatar = "👩",
+            message = "孩子，在外面辛苦了吧？妈给你转点生活费，照顾好自己，吃饱穿暖最重要！",
+            amountRange = { 2000, 8000 },
+            isGift = true,
+            choices = {
+                { text = "🥹 妈你最好了！收下啦",   effect = "accept_gift", moodChange = 30, repChange = 0 },
+                { text = "妈我够用的，你留着用",    effect = "refuse_gift", moodChange = 18, repChange = 5 },
+            },
+        },
+        -- 前老板嘲讽
+        {
+            id = "ex_boss_mock",
+            sender = "前老板陈总",
+            avatar = "😏",
+            message = "听说你出去自己搞了？大街上摆摊？哈哈，什么时候想通了随时回来，位置给你留着。",
+            amountRange = { 0, 0 },
+            choices = {
+                { text = "谢谢，我走我自己的路！", effect = "block", moodChange = 15, repChange = 0 },
+                { text = "这话刺激到我了……",       effect = "delay", moodChange = -12, repChange = 0 },
+            },
+        },
+        -- 粉丝感谢信
+        {
+            id = "fan_thanks",
+            sender = "粉丝 小鱼",
+            avatar = "🐟",
+            message = "博主！你的视频陪我度过了最难熬的一段时间，谢谢你一直坚持！你一定会成功的！",
+            amountRange = { 0, 0 },
+            choices = {
+                { text = "谢谢你！我会继续加油的！", effect = "block", moodChange = 28, repChange = 2 },
+                { text = "默默看完，感触良多……",     effect = "block", moodChange = 15, repChange = 0 },
+            },
+        },
+        -- 发小借钱（你借出去）
+        {
+            id = "friend_borrow",
+            sender = "发小 阿强",
+            avatar = "🤝",
+            message = "兄弟！我最近周转不过来，能借我一点应急吗？有钱了一定第一时间还你！",
+            amountRange = { 500, 3000 },
+            choices = {
+                { text = "朋友一场，借给你！",  effect = "pay",    moodChange = 10, repChange = 8 },
+                { text = "先借你一半吧",        effect = "half",   moodChange = 5,  repChange = 3 },
+                { text = "我也很紧张，帮不上",  effect = "ignore", moodChange = -8, repChange = -3 },
+            },
+        },
+        -- 美食博主联合探店
+        {
+            id = "collab_foodie",
+            sender = "美食博主 吃货君",
+            avatar = "🍽️",
+            message = "博主你好！我在做城市小吃探店系列，想来拍你摊位，合作一期内容，流量共享！",
+            amountRange = { 800, 3000 },
+            isGift = true,
+            choices = {
+                { text = "求之不得！欢迎来拍！", effect = "accept_gift", moodChange = 22, repChange = 5 },
+                { text = "最近太忙，下次吧",     effect = "refuse_gift", moodChange = 3,  repChange = 0 },
+            },
+        },
+        -- 老顾客介绍大客户
+        {
+            id = "customer_referral",
+            sender = "老顾客 李姐",
+            avatar = "😊",
+            message = "老板！我帮你介绍了个大单，附近公司要订你们外卖，谈好了两百份，接不接？",
+            amountRange = { 1500, 6000 },
+            isGift = true,
+            choices = {
+                { text = "太感谢了！接单！",      effect = "accept_gift", moodChange = 22, repChange = 6 },
+                { text = "数量太多，忙不过来",    effect = "refuse_gift", moodChange = -5, repChange = 2 },
+            },
+        },
+        -- 同学聚会邀请
+        {
+            id = "class_reunion",
+            sender = "班长 小明",
+            avatar = "🎓",
+            message = "毕业五周年同学聚会！人都齐了就差你！AA制每人出三百，来吗？",
+            amountRange = { 300, 600 },
+            choices = {
+                { text = "参加！好久不见了！",  effect = "pay",    moodChange = 18, repChange = 4 },
+                { text = "太忙了，心意到就行",  effect = "ignore", moodChange = -6, repChange = -1 },
+            },
+        },
+        -- 食品安全专项检查
+        {
+            id = "food_safety_check",
+            sender = "市场监督管理局",
+            avatar = "🔍",
+            message = "您好，近期开展食品安全专项整治，需缴纳卫生整改材料手续费，请配合办理。",
+            amountRange = { 500, 2000 },
+            choices = {
+                { text = "配合缴费，合规经营", effect = "pay",    moodChange = -5,  repChange = 5  },
+                { text = "拖着，到时候再说",   effect = "ignore", moodChange = -12, repChange = -8 },
+            },
+        },
+        -- 失散旧友重新联系
+        {
+            id = "old_friend_contact",
+            sender = "初中同学 小慧",
+            avatar = "💌",
+            message = "好几年没联系啦！刷到你摆摊的视频找到你了！感觉你变了好多，越来越好了！",
+            amountRange = { 0, 0 },
+            choices = {
+                { text = "好久不见！快聊起来！", effect = "block", moodChange = 22, repChange = 3 },
+                { text = "互关，偶尔点个赞",     effect = "block", moodChange = 10, repChange = 0 },
+            },
+        },
+        -- 假冒账号出现
+        {
+            id = "fake_account",
+            sender = "热心粉丝",
+            avatar = "😡",
+            message = "博主！有人用假账号冒充你骗粉丝买货！已经截图了，你快去投诉！",
+            amountRange = { 0, 0 },
+            choices = {
+                { text = "立刻申诉维权，绝不姑息", effect = "block", moodChange = 8,   repChange = 5  },
+                { text = "心好累，先不管了……",    effect = "delay", moodChange = -18, repChange = -5 },
+            },
+        },
+        -- 投资人询问
+        {
+            id = "investor_inquiry",
+            sender = "创业基金 王总",
+            avatar = "💼",
+            message = "您好！我们关注您很久了，您的账号很有潜力，有没有兴趣谈谈早期投资合作？",
+            amountRange = { 0, 0 },
+            choices = {
+                { text = "非常有兴趣！约个时间！", effect = "block", moodChange = 20, repChange = 3 },
+                { text = "我还想自己走走，谢了",   effect = "block", moodChange = 8,  repChange = 0 },
+            },
+        },
+        -- 外卖平台合作邀请
+        {
+            id = "delivery_invite",
+            sender = "外卖平台商务",
+            avatar = "🛵",
+            message = "您好！我们注意到您的摊位评价很高，有兴趣入驻我们平台开外卖店吗？流量免费导入！",
+            amountRange = { 0, 0 },
+            choices = {
+                { text = "开通！线上线下一起搞", effect = "block", moodChange = 15, repChange = 5 },
+                { text = "先专注线下摊位",        effect = "block", moodChange = 3,  repChange = 0 },
+            },
+        },
+        -- 自媒体平台签约邀请
+        {
+            id = "platform_contract",
+            sender = "抖音MCN机构",
+            avatar = "🎬",
+            message = "您好！我们是抖音头部MCN机构，希望与您签约，提供专业运营支持，保底收益！",
+            amountRange = { 3000, 8000 },
+            isGift = true,
+            choices = {
+                { text = "签！要专业运营支持！",   effect = "accept_gift", moodChange = 25, repChange = 5 },
+                { text = "我想保持独立，不签",     effect = "refuse_gift", moodChange = 5,  repChange = 3 },
             },
         },
     },
