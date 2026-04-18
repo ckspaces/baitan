@@ -88,6 +88,8 @@ function UIManager.refreshActions(gs, config, callbacks)
         content = BottomActions.buildLifeTab(gs, config, C, wrappedCallbacks)
     elseif currentTab_ == "finance" then
         content = BottomActions.buildFinanceTab(gs, config, C, wrappedCallbacks)
+    elseif currentTab_ == "growth" then
+        content = BottomActions.buildGrowthTab(gs, config, C, wrappedCallbacks)
     else
         content = BottomActions.buildMainTab(gs, config, C, wrappedCallbacks)
     end
@@ -95,7 +97,7 @@ function UIManager.refreshActions(gs, config, callbacks)
     actionContent:AddChild(content)
 
     -- 更新 Tab 高亮
-    for _, tab in ipairs({"main", "life", "finance"}) do
+    for _, tab in ipairs({"main", "life", "finance", "growth"}) do
         local btn = uiRoot_:FindById("tab_" .. tab)
         if btn then
             btn:SetStyle({ variant = (tab == currentTab_) and "primary" or "ghost" })

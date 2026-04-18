@@ -93,73 +93,100 @@ GameConfig.MainBusinessTiers = {
 -- batchCost=进货成本, yield=产量, unitPrice=单价, salesRange=每次销量范围
 -- ============================================================================
 
--- Tier 1: 街边摆摊（通用商品 + 地点专属商品）
+-- Tier 1: 街边烤串摊（主打各类烤串）
+-- 经济设计：信任度0时约卖10串/场，羊肉串单批成本120，收入仅30，早期必亏
+-- breakeven点：信任≈80时约卖40串，收入≥批次成本
 GameConfig.StallItems = {
-    { id = "bbq",     name = "烤串",   emoji = "🍢", image = "items/bbq.png",
-      batchCost = 40,  yield = 50, unitPrice = 3,  salesRange = { 25, 50 },
-      energyCost = 6,  moodCost = 1,  unlockMonth = 1, unlockDay = 0, skillReq = {} },
-    { id = "pancake", name = "煎饼",   emoji = "🥞", image = "items/pancake.png",
-      batchCost = 30,  yield = 20, unitPrice = 8,  salesRange = { 12, 22 },
-      energyCost = 5,  moodCost = 1,  unlockMonth = 1, unlockDay = 0, skillReq = {} },
-    { id = "sausage", name = "烤肠",   emoji = "🌭", image = "items/sausage.png",
-      batchCost = 25,  yield = 30, unitPrice = 5,  salesRange = { 15, 30 },
-      energyCost = 5,  moodCost = 1,  unlockMonth = 1, unlockDay = 3, skillReq = {} },
-    { id = "rice",    name = "炒饭",   emoji = "🍳", image = "items/rice.png",
-      batchCost = 35,  yield = 15, unitPrice = 12, salesRange = { 8, 16 },
-      energyCost = 7,  moodCost = 2,  unlockMonth = 1, unlockDay = 7, skillReq = {} },
-    { id = "tea",     name = "奶茶",   emoji = "🧋", image = "items/tea.png",
-      batchCost = 20,  yield = 15, unitPrice = 10, salesRange = { 8, 18 },
-      energyCost = 4,  moodCost = 1,  unlockMonth = 1, unlockDay = 14, skillReq = { marketing = 1 } },
-    { id = "grilled_fish", name = "烤鱼", emoji = "🐟", image = "items/grilled_fish.png",
-      batchCost = 0,   yield = 3,  unitPrice = 35, salesRange = { 2, 5 },
-      energyCost = 15, moodCost = 2,  unlockMonth = 1, unlockDay = 0, skillReq = {},
-      requiresFish = true, fishNeeded = 1,
-      desc = "新鲜钓来的鱼现烤，香气四溢" },
+    -- 羊肉串：最经典的起点，高批次成本 → 早期亏损，打磨技术才能盈利
+    { id = "mutton_skewer",   name = "羊肉串",  emoji = "🍢", image = "items/bbq.png",
+      batchCost = 120, yield = 50, unitPrice = 3,  salesRange = { 8, 50 },
+      energyCost = 6,  moodCost = 1,  unlockMonth = 1, unlockDay = 0, skillReq = {},
+      desc = "秘制调料腌制，炭火现烤，香飘十里" },
+    -- 豆腐串：第二个解锁，平价品种，弥补亏损
+    { id = "tofu_skewer",     name = "豆腐串",  emoji = "🫕", image = "items/tofu_skewer.png",
+      batchCost = 60,  yield = 40, unitPrice = 3,  salesRange = { 6, 40 },
+      energyCost = 4,  moodCost = 1,  unlockMonth = 1, unlockDay = 3, skillReq = {},
+      desc = "老豆腐烤至金黄，抹上秘制酱料，软嫩入味" },
+    -- 烤鸡翅：中档品种，回头客最爱
+    { id = "chicken_wing",    name = "烤鸡翅",  emoji = "🍗", image = "items/fried_chicken.png",
+      batchCost = 80,  yield = 20, unitPrice = 8,  salesRange = { 6, 20 },
+      energyCost = 5,  moodCost = 1,  unlockMonth = 1, unlockDay = 7, skillReq = {},
+      desc = "蜜汁腌制鸡翅，外皮酥脆，肉质鲜嫩" },
+    -- 蘑菇串：素食招牌，女生/学生最爱
+    { id = "mushroom_skewer", name = "蘑菇串",  emoji = "🍄", image = "items/mushroom_skewer.png",
+      batchCost = 50,  yield = 40, unitPrice = 3,  salesRange = { 6, 40 },
+      energyCost = 4,  moodCost = 1,  unlockMonth = 1, unlockDay = 14, skillReq = {},
+      desc = "精选鲜蘑菇，奶香蒜蓉口味，素食首选" },
+    -- 牛肉串：第2个月解锁的高端品种，客单价高
+    { id = "beef_skewer",     name = "牛肉串",  emoji = "🥩", image = "items/chicken_steak.png",
+      batchCost = 150, yield = 40, unitPrice = 6,  salesRange = { 8, 40 },
+      energyCost = 7,  moodCost = 2,  unlockMonth = 2, unlockDay = 0, skillReq = { tech = 1 },
+      desc = "精选牛肩肉，孜然黑椒双料调味，霸气满满" },
+    -- 鱿鱼串：夜市必备高价品种，第3个月解锁
+    { id = "squid_skewer",    name = "鱿鱼串",  emoji = "🦑", image = "items/squid.png",
+      batchCost = 100, yield = 15, unitPrice = 12, salesRange = { 4, 15 },
+      energyCost = 7,  moodCost = 2,  unlockMonth = 3, unlockDay = 0, skillReq = { marketing = 1 },
+      desc = "整只铁板鱿鱼，辣酱姜葱爆香，烟火气十足" },
 }
 
 -- ============================================================================
--- 地点专属商品（仅在特定地点出现的额外商品）
+-- 地点专属烤串（各地点限定的特色烤串品种）
 -- ============================================================================
 GameConfig.LocationItems = {
     school = {
-        { id = "fried_chicken", name = "炸鸡",    emoji = "🍗", image = "items/fried_chicken.png",
-          batchCost = 45,  yield = 25, unitPrice = 8,  salesRange = { 15, 28 },
-          energyCost = 7,  moodCost = 2,  unlockMonth = 1, unlockDay = 0, skillReq = {} },
-        { id = "chicken_strip", name = "鸡柳",   emoji = "🍖", image = "items/chicken_strip.png",
-          batchCost = 35,  yield = 30, unitPrice = 5,  salesRange = { 20, 35 },
-          energyCost = 5,  moodCost = 1,  unlockMonth = 1, unlockDay = 3, skillReq = {} },
-        { id = "chicken_steak", name = "鸡排",   emoji = "🥩", image = "items/chicken_steak.png",
-          batchCost = 50,  yield = 20, unitPrice = 10, salesRange = { 12, 22 },
-          energyCost = 6,  moodCost = 1,  unlockMonth = 1, unlockDay = 7, skillReq = {} },
-        { id = "bubble_tea",    name = "珍珠奶茶", emoji = "🧋", image = "items/bubble_tea.png",
-          batchCost = 25,  yield = 20, unitPrice = 8,  salesRange = { 12, 24 },
-          energyCost = 4,  moodCost = 1,  unlockMonth = 1, unlockDay = 10, skillReq = {} },
+        -- 校门口专属：学生最爱的平价串
+        { id = "spicy_gluten",  name = "辣条串",  emoji = "🌶️", image = "items/sausage.png",
+          batchCost = 40,  yield = 60, unitPrice = 2,  salesRange = { 20, 60 },
+          energyCost = 4,  moodCost = 1,  unlockMonth = 1, unlockDay = 0, skillReq = {},
+          desc = "魔鬼辣串，挑战极限，校园必打卡" },
+        { id = "ricecake_skewer", name = "年糕串", emoji = "🍡", image = "items/tofu_skewer.png",
+          batchCost = 50,  yield = 30, unitPrice = 4,  salesRange = { 15, 30 },
+          energyCost = 5,  moodCost = 1,  unlockMonth = 1, unlockDay = 5, skillReq = {},
+          desc = "Q弹年糕夹蟹籽，甜辣口味放学必吃" },
     },
     community = {
-        { id = "jianbing",  name = "手抓饼",  emoji = "🫓", image = "items/jianbing.png",
-          batchCost = 30,  yield = 20, unitPrice = 7,  salesRange = { 12, 22 },
-          energyCost = 5,  moodCost = 1,  unlockMonth = 1, unlockDay = 0, skillReq = {} },
-        { id = "congbing",  name = "葱油饼",  emoji = "🥞", image = "items/congbing.png",
-          batchCost = 20,  yield = 25, unitPrice = 5,  salesRange = { 15, 28 },
-          energyCost = 5,  moodCost = 1,  unlockMonth = 1, unlockDay = 5, skillReq = {} },
+        -- 社区菜场旁：大叔大妈最爱的家常串
+        { id = "eggplant_skewer", name = "茄子串", emoji = "🍆", image = "items/mushroom_skewer.png",
+          batchCost = 45,  yield = 35, unitPrice = 3,  salesRange = { 12, 35 },
+          energyCost = 4,  moodCost = 1,  unlockMonth = 1, unlockDay = 0, skillReq = {},
+          desc = "烤软茄子抹蒜蓉，下饭神器，老少皆宜" },
+        { id = "veggie_combo",   name = "时蔬串",  emoji = "🥦", image = "items/mushroom_skewer.png",
+          batchCost = 35,  yield = 40, unitPrice = 3,  salesRange = { 10, 40 },
+          energyCost = 3,  moodCost = 1,  unlockMonth = 1, unlockDay = 5, skillReq = {},
+          desc = "花菜、玉米、花椰菜组合，健康清爽" },
     },
     nightmarket = {
-        { id = "stinky_tofu", name = "臭豆腐",  emoji = "🫕", image = "items/stinky_tofu.png",
-          batchCost = 30,  yield = 20, unitPrice = 10, salesRange = { 12, 22 },
-          energyCost = 6,  moodCost = 1,  unlockMonth = 3, unlockDay = 0, skillReq = {} },
-        { id = "squid",       name = "铁板鱿鱼", emoji = "🦑", image = "items/squid.png",
-          batchCost = 40,  yield = 15, unitPrice = 12, salesRange = { 10, 18 },
-          energyCost = 7,  moodCost = 2,  unlockMonth = 3, unlockDay = 5, skillReq = {} },
+        -- 夜市必备：猎奇高价串
+        { id = "kidney_skewer",  name = "腰子串",  emoji = "🫀", image = "items/squid.png",
+          batchCost = 80,  yield = 20, unitPrice = 10, salesRange = { 8, 20 },
+          energyCost = 6,  moodCost = 2,  unlockMonth = 3, unlockDay = 0, skillReq = {},
+          desc = "新鲜猪腰，孜然爆炒，夜市撸串必点" },
+        { id = "shrimp_skewer",  name = "大虾串",  emoji = "🦐", image = "items/squid.png",
+          batchCost = 120, yield = 15, unitPrice = 15, salesRange = { 5, 15 },
+          energyCost = 7,  moodCost = 2,  unlockMonth = 3, unlockDay = 7, skillReq = { marketing = 1 },
+          desc = "整只白虾刷蒜蓉，鲜甜多汁，夜市扛把子" },
     },
     business = {
-        { id = "coffee",   name = "手冲咖啡",  emoji = "☕", image = "items/coffee.png",
-          batchCost = 35,  yield = 15, unitPrice = 15, salesRange = { 8, 16 },
-          energyCost = 5,  moodCost = 1,  unlockMonth = 2, unlockDay = 0, skillReq = { tech = 1 } },
+        -- 商业区：高端上班族的精品串
+        { id = "beef_tongue",     name = "牛舌串",  emoji = "🥩", image = "items/chicken_steak.png",
+          batchCost = 160, yield = 20, unitPrice = 15, salesRange = { 5, 20 },
+          energyCost = 6,  moodCost = 1,  unlockMonth = 2, unlockDay = 0, skillReq = { tech = 1 },
+          desc = "精切牛舌，盐麹腌制，轻奢下午茶串" },
+        { id = "wagyu_skewer",    name = "黑椒牛肉串", emoji = "🥩", image = "items/chicken_steak.png",
+          batchCost = 200, yield = 15, unitPrice = 18, salesRange = { 4, 15 },
+          energyCost = 7,  moodCost = 2,  unlockMonth = 2, unlockDay = 10, skillReq = { tech = 2 },
+          desc = "进口牛肩肉，黑椒酱香，高端白领首选" },
     },
     station = {
-        { id = "boxlunch", name = "便当盒饭",  emoji = "🍱", image = "items/boxlunch.png",
-          batchCost = 50,  yield = 20, unitPrice = 15, salesRange = { 12, 22 },
-          energyCost = 7,  moodCost = 2,  unlockMonth = 5, unlockDay = 0, skillReq = {} },
+        -- 车站旁：方便打包的快食串
+        { id = "duck_wing",       name = "鸭翅串",  emoji = "🍗", image = "items/fried_chicken.png",
+          batchCost = 70,  yield = 25, unitPrice = 6,  salesRange = { 8, 25 },
+          energyCost = 5,  moodCost = 1,  unlockMonth = 5, unlockDay = 0, skillReq = {},
+          desc = "卤制鸭翅再上炉烤，边走边啃的旅途零食" },
+        { id = "cartilage_skewer", name = "脆骨串", emoji = "🦴", image = "items/sausage.png",
+          batchCost = 55,  yield = 30, unitPrice = 4,  salesRange = { 10, 30 },
+          energyCost = 4,  moodCost = 1,  unlockMonth = 5, unlockDay = 5, skillReq = {},
+          desc = "软骨嘎嘣脆，嚼劲十足，候车必备" },
     },
 }
 
@@ -249,15 +276,17 @@ GameConfig.Chengguan = {
 GameConfig.Hawking = {
     CUSTOMERS_PER_HAWK = { 1, 3 },   -- 每次叫卖吸引的顾客数
     UNITS_PER_CUSTOMER = { 1, 3 },   -- 每位顾客购买的份数
-    -- 顾客购买时的描述（随机选一个）
+    -- 顾客点串台词（随机选一个）
     CUSTOMER_LINES = {
-        "大哥，来%d份！",
-        "老板，给我来%d份尝尝！",
-        "闻着真香，来%d份！",
-        "这个多少钱？来%d份试试！",
-        "给我也来%d份！",
-        "看着不错，要%d份！",
-        "帮我装%d份，打包带走！",
+        "老板，来%d串！",
+        "给我来%d串羊肉！",
+        "闻着太香了，来%d串！",
+        "鸡翅串有没有？来%d串！",
+        "帮我多撒孜然，要%d串！",
+        "再来%d串，上次没吃够！",
+        "打包%d串，带走边走边吃！",
+        "老板，多刷点辣酱，要%d串！",
+        "两口人，先来%d串垫垫肚子！",
     },
 }
 
@@ -269,7 +298,7 @@ GameConfig.Proficiency = {
     SALES_BONUS_PER_LEVEL = 0.05,   -- 每级增加5%销量
     FANS_PER_HAWK = { 1, 5 },       -- 每次叫卖基础涨粉
     FANS_BONUS_PER_LEVEL = 3,       -- 每级额外涨粉
-    LEVEL_NAMES = { "新手", "学徒", "熟练", "老手", "高手", "大师", "宗师", "传奇", "神话", "烤神" },
+    LEVEL_NAMES = { "生串手", "入门串匠", "熟练串匠", "老司炉", "串霸", "炭火大师", "孜然宗师", "传奇炉主", "烤串神话", "炭火烤神" },
 }
 
 -- 单品制作与顺序解锁系统
@@ -336,21 +365,25 @@ GameConfig.Weather = {
     },
     -- 天气类型概率（按季节）
     WEATHER_PROBS = {
-        spring = { sunny = 0.35, cloudy = 0.25, rainy = 0.30, windy = 0.10, snowy = 0 },
-        summer = { sunny = 0.45, cloudy = 0.20, rainy = 0.25, windy = 0.05, snowy = 0 },
-        autumn = { sunny = 0.30, cloudy = 0.30, rainy = 0.15, windy = 0.25, snowy = 0 },
-        winter = { sunny = 0.20, cloudy = 0.25, rainy = 0.10, windy = 0.15, snowy = 0.30 },
+        spring = { sunny = 0.32, cloudy = 0.23, rainy = 0.27, windy = 0.10, snowy = 0, stormy = 0.08 },
+        summer = { sunny = 0.40, cloudy = 0.18, rainy = 0.22, windy = 0.05, snowy = 0, stormy = 0.15 },
+        autumn = { sunny = 0.28, cloudy = 0.28, rainy = 0.14, windy = 0.24, snowy = 0, stormy = 0.06 },
+        winter = { sunny = 0.19, cloudy = 0.24, rainy = 0.09, windy = 0.14, snowy = 0.30, stormy = 0.04 },
     },
     WEATHER_NAMES = {
-        sunny = "晴天", cloudy = "多云", rainy = "下雨", windy = "大风", snowy = "下雪",
+        sunny = "晴天", cloudy = "多云", rainy = "下雨", windy = "大风", snowy = "下雪", stormy = "暴雨",
     },
     WEATHER_EMOJI = {
-        sunny = "☀️", cloudy = "⛅", rainy = "🌧️", windy = "💨", snowy = "🌨️",
+        sunny = "☀️", cloudy = "⛅", rainy = "🌧️", windy = "💨", snowy = "🌨️", stormy = "⛈️",
     },
     -- 天气对收入的影响
     INCOME_MODIFIER = {
-        sunny = 1.1, cloudy = 1.0, rainy = 0.7, windy = 0.85, snowy = 0.6,
+        sunny = 1.1, cloudy = 1.0, rainy = 0.65, windy = 0.85, snowy = 0.55, stormy = 0.10,
     },
+    -- 恶劣天气（严重影响客流的）
+    BAD_WEATHER = { rainy = true, snowy = true, stormy = true },
+    -- 暴雨特殊警告
+    STORMY_WARNING = "暴雨天气！几乎无人出行，今日经营收入极低",
 }
 
 -- ============================================================================
@@ -708,117 +741,117 @@ GameConfig.Locations = {
 }
 
 -- ============================================================================
--- 促销活动系统
+-- 烤串套餐促销系统（吸引顾客、提升客单价的核心手段）
 -- ============================================================================
 GameConfig.Promotions = {
     {
-        id = "discount10",  name = "九折优惠",    emoji = "🏷️",
-        desc = "全场九折，薄利多销",
-        cost = 200,                          -- 广告/材料费
-        duration = 3,                        -- 持续3个回合
-        priceMod = 0.9,                      -- 售价打9折
-        salesMod = 1.25,                     -- 销量+25%
-        trustGainBonus = 2,                  -- 信任额外+2
+        id = "discount10",  name = "十串优惠价",  emoji = "🔟",
+        desc = "凑满十串打折，薄利多销积累口碑",
+        cost = 200,
+        duration = 3,
+        priceMod = 0.88,                     -- 满十串88折
+        salesMod = 1.3,                      -- 销量+30%
+        trustGainBonus = 3,
         unlockStallDays = 0,                 -- 立即可用
     },
     {
-        id = "tasting",     name = "免费试吃",    emoji = "🥢",
-        desc = "提供免费试吃，大幅提升信任度",
-        cost = 1000,
+        id = "tasting",     name = "免费试串",    emoji = "🍢",
+        desc = "免费发串试吃，让路人变回头客",
+        cost = 800,
         duration = 2,
         priceMod = 1.0,
-        salesMod = 1.1,
-        trustGainBonus = 10,                 -- 信任大增
-        unlockStallDays = 3,                 -- 摆摊3天解锁
-        fameGainBonus = 5,                   -- 促销期间每次叫卖额外+5名气
+        salesMod = 1.15,
+        trustGainBonus = 12,                 -- 信任大增
+        unlockStallDays = 3,
+        fameGainBonus = 6,
     },
     {
-        id = "bogo",        name = "买一送一",    emoji = "🎁",
-        desc = "买一送一，客流翻倍但利润减半",
-        cost = 500,
+        id = "bogo",        name = "买五送一",    emoji = "🎁",
+        desc = "买五串送一串，客流激增但利润压缩",
+        cost = 400,
         duration = 2,
-        priceMod = 0.5,                      -- 相当于半价
-        salesMod = 2.0,                      -- 销量翻倍
+        priceMod = 0.83,                     -- 相当于六折五折之间
+        salesMod = 1.8,                      -- 销量大增
         trustGainBonus = 5,
-        unlockStallDays = 5,                 -- 摆摊5天解锁
-        fameGainBonus = 3,
+        unlockStallDays = 5,
+        fameGainBonus = 4,
     },
     {
-        id = "combo",       name = "套餐优惠",    emoji = "🍱",
-        desc = "搭配套餐组合，提高客单价",
-        cost = 800,
+        id = "combo",       name = "情侣套餐",    emoji = "💑",
+        desc = "20串羊肉+10串鸡翅+两杯凉茶，情侣首选",
+        cost = 600,
         duration = 3,
-        priceMod = 1.3,                      -- 客单价提升
-        salesMod = 0.9,                      -- 销量微降
-        trustGainBonus = 3,
-        unlockStallDays = 8,                 -- 摆摊8天解锁
-        unlockTrust = 15,                    -- 需要信任度15
+        priceMod = 1.25,                     -- 套餐溢价，客单价提升
+        salesMod = 0.95,
+        trustGainBonus = 4,
+        unlockStallDays = 8,
+        unlockTrust = 15,
         skillReq = { marketing = 1 },
     },
     {
-        id = "lucky",       name = "幸运抽奖",    emoji = "🎰",
-        desc = "消费满额抽奖，增加客户粘性",
-        cost = 1500,
+        id = "lucky",       name = "神秘口味串",  emoji = "🎰",
+        desc = "随机口味惊喜串，吃了就晒单，自然涨粉",
+        cost = 1200,
         duration = 4,
         priceMod = 1.0,
-        salesMod = 1.35,
-        trustGainBonus = 4,
-        unlockStallDays = 12,                -- 摆摊12天解锁
+        salesMod = 1.4,
+        trustGainBonus = 5,
+        unlockStallDays = 12,
         unlockTrust = 25,
         skillReq = { charm = 1, marketing = 2 },
-        fameGainBonus = 8,
+        fameGainBonus = 10,
     },
     {
-        id = "member",      name = "会员日特价",  emoji = "💳",
-        desc = "老顾客专属折扣，高信任时效果更好",
-        cost = 2000,
+        id = "member",      name = "老顾客专享",  emoji = "💳",
+        desc = "老顾客持码享专属折扣，增强粘性留住回头客",
+        cost = 1500,
         duration = 3,
-        priceMod = 0.85,
-        salesMod = 1.15,
-        trustGainBonus = 6,
-        trustRequired = 40,                  -- 需要信任度40以上才有效
-        unlockStallDays = 18,                -- 摆摊18天解锁
+        priceMod = 0.82,
+        salesMod = 1.2,
+        trustGainBonus = 8,
+        trustRequired = 40,
+        unlockStallDays = 18,
         unlockTrust = 40,
         skillReq = { management = 2 },
     },
 }
 
 -- ============================================================================
--- 地点专属促销活动（学校针对小孩的特殊活动）
+-- 地点专属烤串促销活动
 -- ============================================================================
 GameConfig.LocationPromotions = {
     school = {
         {
-            id = "kids_combo",    name = "学生套餐",    emoji = "🎒",
-            desc = "学生专属套餐价，小朋友抢着买",
+            id = "kids_combo",    name = "学生五串套",  emoji = "🎒",
+            desc = "五串羊肉+一份小辣条，学生党最爱",
             cost = 300,
             duration = 3,
-            priceMod = 0.8,
-            salesMod = 1.5,
-            trustGainBonus = 4,
-            unlockStallDays = 0,             -- 立即可用
-            fameGainBonus = 3,
-        },
-        {
-            id = "after_school",  name = "放学特惠",    emoji = "🔔",
-            desc = "下午放学时段限时折扣，客流爆发",
-            cost = 400,
-            duration = 3,
-            priceMod = 0.85,
-            salesMod = 1.8,
+            priceMod = 0.78,
+            salesMod = 1.6,
             trustGainBonus = 5,
-            unlockStallDays = 0,             -- 立即可用
+            unlockStallDays = 0,
+            fameGainBonus = 4,
         },
         {
-            id = "sticker_gift",  name = "集卡送玩具",  emoji = "🃏",
-            desc = "消费集贴纸，满5张送小玩具，小孩天天来",
-            cost = 600,
+            id = "after_school",  name = "放学串串节",  emoji = "🔔",
+            desc = "放学后限时8折，学生蜂拥而来",
+            cost = 350,
+            duration = 3,
+            priceMod = 0.8,
+            salesMod = 2.0,
+            trustGainBonus = 6,
+            unlockStallDays = 0,
+        },
+        {
+            id = "sticker_gift",  name = "集章换免费串", emoji = "🃏",
+            desc = "每消费5串盖一章，集满5章送三串，天天来打卡",
+            cost = 500,
             duration = 5,
             priceMod = 1.0,
-            salesMod = 1.4,
-            trustGainBonus = 8,
-            unlockStallDays = 5,             -- 摆摊5天解锁
-            fameGainBonus = 5,
+            salesMod = 1.5,
+            trustGainBonus = 10,
+            unlockStallDays = 5,
+            fameGainBonus = 6,
         },
     },
 }
@@ -997,6 +1030,161 @@ GameConfig.Colors = {
     WARNING     = { 255, 180, 50, 255 },
     DANGER      = { 255, 80, 80, 255 },
     GOLD        = { 255, 200, 50, 255 },
+}
+
+-- ============================================================================
+-- 制作报废率系统
+-- ============================================================================
+GameConfig.Waste = {
+    BASE_RATE = 0.20,               -- 基础报废率 20%（技术Lv1）
+    REDUCE_PER_TECH_LV = 0.02,      -- 每级技术降低 2% 报废率
+    MIN_RATE = 0.02,                -- 最低报废率（技术满级约2%）
+    -- 报废率提示文本
+    WASTE_MSG = function(wasted, rate)
+        return string.format("制作损耗 %d 份（报废率%.0f%%）", wasted, rate * 100)
+    end,
+}
+
+-- ============================================================================
+-- 顾客评价系统
+-- ============================================================================
+GameConfig.CustomerReview = {
+    TRIGGER_CHANCE = 0.18,          -- 每轮实时经营触发评价的概率
+    GOOD_REVIEW_BASE = 0.65,        -- 好评基础概率（信任度影响）
+    TRUST_BONUS_PER_10 = 0.04,      -- 每10点信任度额外加好评概率
+    MAX_REVIEWS_STORED = 8,         -- UI 最多显示8条评价
+    -- 好评文本库（烤串风格）
+    GOOD_TEXTS = {
+        "羊肉串真绝了！孜然味超正！",
+        "老板烤技一流，每串都焦香酥嫩👍",
+        "性价比超高，十串才多少钱！",
+        "腌料秘方一定不能告诉别人哈哈",
+        "来了好几次了，串串都不踩雷",
+        "朋友推荐过来的，一吃就上瘾",
+        "今天刚好赶上新出的鸡翅串，绝了！",
+        "就这个炭火香味！别家烤不出来",
+        "鱿鱼串鲜嫩，完全没有腥味，牛！",
+        "蘑菇串出乎意料的好吃，下次再来",
+    },
+    -- 差评文本库（烤串风格）
+    BAD_TEXTS = {
+        "等太久了，下次不来了",
+        "今天串感觉腌得不够入味",
+        "有点贵，别家同样的料便宜些",
+        "态度还好，但烤得有点过焦了",
+        "卖完了？那我去别家了",
+        "孜然味道淡了些，希望加量",
+        "今天感觉分量少了，不如上次",
+    },
+    -- 评价对信任度的影响
+    GOOD_TRUST_GAIN = 0.8,
+    BAD_TRUST_LOSS = 1.2,
+}
+
+-- ============================================================================
+-- 同行竞争系统
+-- ============================================================================
+GameConfig.Competitor = {
+    -- 竞争对手名字库
+    NAMES = { "老张", "李师傅", "王大姐", "赵老板", "陈记", "刘三哥", "小吴", "周记摊" },
+    EMOJI = { "😤", "😎", "🙃", "😏", "🤑", "😡", "😤", "🤔" },
+    -- 竞争强度：对客流的削减比例
+    STEAL_RATE = 0.30,              -- 竞争对手抢走 30% 流量
+    DURATION_DAYS = 3,              -- 竞争持续 3 天
+    -- 竞争结束后可能的后续事件概率
+    MERGE_CHANCE = 0.15,            -- 15% 概率竞争对手主动求和
+}
+
+-- ============================================================================
+-- 善值与社交系统
+-- ============================================================================
+GameConfig.Virtue = {
+    -- 捐款善值奖励
+    DONATE_VIRTUE_GAIN = 15,        -- 每次捐款获得善值
+    DONATE_GOODWILL_GAIN = 10,      -- 每次捐款获得好感度
+    DONATE_FAME_GAIN = 50,          -- 每次捐款获得名气
+    DONATE_TRUST_GAIN = 5,          -- 捐款还能小涨信任度（好口碑扩散）
+    -- 善值门槛名称
+    VIRTUE_LEVELS = {
+        { threshold = 0,   name = "普通人",   emoji = "😐" },
+        { threshold = 20,  name = "热心人",   emoji = "😊" },
+        { threshold = 50,  name = "好心人",   emoji = "🤝" },
+        { threshold = 100, name = "善人",     emoji = "✨" },
+        { threshold = 200, name = "活雷锋",   emoji = "🌟" },
+        { threshold = 500, name = "大善人",   emoji = "💫" },
+    },
+    -- 好感度门槛（影响随机事件触发概率）
+    GOODWILL_BONUS_EVENTS_THRESHOLD = 30,  -- 好感度≥30解锁好感事件
+    -- 同行生病事件：捐出当日预估收入
+    SICK_PEER_INCOME_RATIO = 1.0,   -- 捐出 100% 当日预期收入
+    SICK_PEER_MIN_DONATE = 200,     -- 最低捐款金额
+}
+
+-- ============================================================================
+-- 伙计系统
+-- ============================================================================
+GameConfig.Helper = {
+    -- 候选人池（含头像路径）
+    CANDIDATES = {
+        {
+            name = "小李", level = 1, salary = 80,  efficiency = 0.70,
+            avatar = "image/helper_xiaoli_20260418013902.png",
+            desc = "初出茅庐的小伙，干劲十足但经验不足",
+            trait = "勤快", mood = 80, loyalty = 60,
+        },
+        {
+            name = "阿芳", level = 1, salary = 90,  efficiency = 0.75,
+            avatar = "image/helper_afang_20260418013853.png",
+            desc = "热情开朗的小姐姐，顾客缘极好",
+            trait = "亲切", mood = 85, loyalty = 65,
+        },
+        {
+            name = "老赵", level = 2, salary = 150, efficiency = 0.82,
+            avatar = "image/helper_laozha_20260418013859.png",
+            desc = "摆摊多年的老兵，稳重可靠",
+            trait = "稳重", mood = 70, loyalty = 80,
+        },
+        {
+            name = "小王", level = 2, salary = 160, efficiency = 0.85,
+            avatar = "image/helper_xiaowang_20260418013848.png",
+            desc = "思路清晰的年轻人，善于应对突发情况",
+            trait = "机灵", mood = 75, loyalty = 70,
+        },
+        {
+            name = "阿强", level = 3, salary = 250, efficiency = 0.90,
+            avatar = "image/helper_aqiang_20260418013854.png",
+            desc = "资深老手，独当一面的摊贩高手",
+            trait = "老练", mood = 72, loyalty = 85,
+        },
+    },
+    RECRUIT_COOLDOWN_DAYS = 7,
+    SALARY_DEDUCT_MSG = "支付 %s 工资 $%d",
+    LEVEL_NAMES = { "普通伙计", "熟练伙计", "老手伙计" },
+    LEVEL_EMOJI = { "🟢", "🔵", "⭐" },
+}
+
+-- ============================================================================
+-- 朋友圈系统
+-- ============================================================================
+GameConfig.Moments = {
+    -- 发帖类型定义
+    POST_TYPES = {
+        recruit   = { label = "📢 招募伙计",   cost = 0,  fameGain = 0,  followerGain = 0,  moodGain = 0  },
+        checkin   = { label = "🍢 经营打卡",   cost = 0,  fameGain = 5,  followerGain = 2,  moodGain = 5  },
+        showoff   = { label = "💰 晒今日收入", cost = 0,  fameGain = 10, followerGain = 5,  moodGain = 8,  riskChance = 0.10 },
+        vent      = { label = "😔 诉苦发泄",   cost = 0,  fameGain = 0,  followerGain = 0,  moodGain = 15, repLoss = 2 },
+        advertise = { label = "🎯 宣传推广",   cost = 50, fameGain = 0,  followerGain = 10, moodGain = 0  },
+    },
+    -- 发帖成功提示
+    SUCCESS_MSGS = {
+        recruit   = "📢 你在朋友圈发了招募启事，候选人正在联系你！",
+        checkin   = "🍢 打卡成功！朋友们都给你点赞了，心情大好！",
+        showoff   = "💰 晒出收入，朋友们羡慕不已！名气+10，涨了粉！",
+        vent      = "😔 倾诉一番，心情舒畅多了，虽然有点影响口碑…",
+        advertise = "🎯 宣传帖发出去了！粉丝+10，花了 $50 推广费",
+    },
+    -- 每种帖子同一天只能发一次
+    MAX_HISTORY = 10,   -- 朋友圈记录最多保留10条
 }
 
 return GameConfig

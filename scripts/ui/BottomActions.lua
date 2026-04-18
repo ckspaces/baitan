@@ -4,6 +4,8 @@
 
 local UI = require("urhox-libs/UI")
 local ProgressionSystem = require("core.ProgressionSystem")
+local SkillTrainingPanel = require("ui.SkillTrainingPanel")
+local ScaleSystem = require("core.ScaleSystem")
 
 local BottomActions = {}
 
@@ -11,6 +13,7 @@ local TAB_DEFS = {
     { id = "main",     label = "主业" },
     { id = "life",     label = "生活" },
     { id = "finance",  label = "财务" },
+    { id = "growth",   label = "成长" },
 }
 
 --- 创建底部面板
@@ -113,6 +116,67 @@ function BottomActions.buildMainTab(gs, config, colors, callbacks)
     end
 end
 
+--- 规模成长信息条（选品区底部）
+--- 展示：基础→实际的产量/成本对比，以及回收率
+function BottomActions.buildScaleInfoBar(gs, config, colors, item)
+    local si = ScaleSystem.getInfo(gs, config, item)
+
+    -- 产量行
+    local yieldText, yieldColor
+    if si.yieldBonus > 0 then
+        yieldText  = string.format("产量 %d → %d份 (+%d)", si.baseYield, si.effYield, si.yieldBonus)
+        yieldColor = colors.SUCCESS
+    else
+        yieldText  = string.format("产量 %d份", si.baseYield)
+        yieldColor = colors.TEXT_DIM
+    end
+
+    -- 成本行
+    local costText, costColor
+    if si.discPct > 0 then
+        costText  = string.format("进货 $%d → $%d (-%d%%)", si.baseCost, si.effCost, si.discPct)
+        costColor = { 100, 220, 140, 255 }
+    else
+        costText  = string.format("进货 $%d", si.baseCost)
+        costColor = colors.TEXT_DIM
+    end
+
+    -- 单价 + 回收率
+    local unitInfo = string.format("售价 $%d/串", item.unitPrice)
+    if si.salvagePct > 0 then
+        unitInfo = unitInfo .. string.format("  尾货回收 %d%%", si.salvagePct)
+    end
+
+    -- 下一里程碑提示
+    local milestoneText = nil
+    if si.nextMilestone then
+        local remaining = si.nextMilestone - si.stallDayCount
+        milestoneText = string.format("再经营 %d 天解锁更多折扣", remaining)
+    end
+
+    local rows = {
+        UI.Panel {
+            width = "100%", flexDirection = "row", justifyContent = "space-between",
+            children = {
+                UI.Label { text = yieldText, fontSize = 9, fontColor = yieldColor },
+                UI.Label { text = costText,  fontSize = 9, fontColor = costColor  },
+            },
+        },
+        UI.Label { text = unitInfo, fontSize = 9, fontColor = colors.TEXT_DIM, textAlign = "center" },
+    }
+    if milestoneText then
+        rows[#rows + 1] = UI.Label {
+            text = "📈 " .. milestoneText,
+            fontSize = 9, fontColor = { 180, 160, 90, 200 }, textAlign = "center",
+        }
+    end
+
+    return UI.Panel {
+        width = "100%", flexDirection = "column", gap = 2,
+        children = rows,
+    }
+end
+
 --- 出摊前视图：选品、进货出摊、升级、打工
 function BottomActions.buildPreStallView(gs, config, colors, callbacks)
     local items = ProgressionSystem.getCurrentItems(gs, config)
@@ -140,14 +204,9 @@ function BottomActions.buildPreStallView(gs, config, colors, callbacks)
         width = "100%", padding = 6, backgroundColor = { 25, 30, 45, 200 }, borderRadius = 6,
         flexDirection = "column", gap = 4,
         children = {
-            UI.Label { text = "-- 选择商品 --", fontSize = 11, fontColor = colors.ACCENT, textAlign = "center" },
+            UI.Label { text = "-- 今日主打串 --", fontSize = 11, fontColor = colors.ACCENT, textAlign = "center" },
             BottomActions.buildItemSelector(gs, config, colors, callbacks),
-            UI.Label {
-                text = string.format("当前: %s%s  进货$%d → 产出%d份  售价$%d/份",
-                    selectedItem.emoji, selectedItem.name,
-                    selectedItem.batchCost, selectedItem.yield, selectedItem.unitPrice),
-                fontSize = 9, fontColor = colors.TEXT_DIM, textAlign = "center",
-            },
+            BottomActions.buildScaleInfoBar(gs, config, colors, selectedItem),
         },
     }
 
@@ -200,7 +259,7 @@ function BottomActions.buildPreStallView(gs, config, colors, callbacks)
 
     -- 发传单 + 进货出摊按钮
     local flyerBonus = math.floor((gs.flyersActive or 0) * config.Flyer.BONUS_PER_STACK * 100)
-    local stallLabel = tierDef.tier >= 2 and "进货开业！" or "进货出摊！"
+    local stallLabel = tierDef.tier >= 2 and "进货开业！" or "进货开烤！"
     children[#children + 1] = UI.Panel {
         width = "100%", flexDirection = "row", gap = 4, marginTop = 4,
         children = {
@@ -305,8 +364,6 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
     local sessionCosts = gs.stallSessionCosts or 0
     local sessionNet = (gs.stallSessionRevenue or 0) - (gs.stallSessionCosts or 0)
     local closeHour = ((config.StallRealtime or {}).CLOSE_HOUR or 21)
-    local modeLabel = ({ balanced = '平衡经营', observe = '观望蓄客', hawk = '冲刺叫卖' })[gs.stallActionMode or 'balanced'] or '平衡经营'
-
     -- 标题 + 营业中标记
     children[#children + 1] = UI.Panel {
         width = "100%", padding = 6, backgroundColor = { 18, 24, 38, 220 }, borderRadius = 6,
@@ -316,7 +373,7 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
                 width = "100%", flexDirection = "row", justifyContent = "space-between",
                 children = {
                     UI.Label { text = string.format("营业时间 %s / %02d:00", currentTime, closeHour), fontSize = 10, fontColor = colors.ACCENT },
-                    UI.Label { text = modeLabel, fontSize = 9, fontColor = colors.TEXT_WHITE },
+                    UI.Label { text = "🌊 自然客流", fontSize = 9, fontColor = colors.TEXT_WHITE },
                 },
             },
             UI.Panel {
@@ -341,6 +398,50 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
         },
     }
 
+    -- === 天气状态条 ===
+    local weather = gs.currentWeather or "sunny"
+    local wConfig = config.Weather or {}
+    local wName = (wConfig.WEATHER_NAMES or {})[weather] or weather
+    local wEmoji = (wConfig.WEATHER_EMOJI or {})[weather] or "🌤️"
+    local wMod = (wConfig.INCOME_MODIFIER or {})[weather] or 1.0
+    local isStormy = weather == "stormy"
+    local isBadWeather = (wConfig.BAD_WEATHER or {})[weather]
+    if isBadWeather then
+        local wText = isStormy
+            and string.format("⛈️ 暴雨！客流极低（收入×%.0f%%）——今天很难做", wMod * 100)
+            or string.format("%s %s中，客流受影响（收入×%.0f%%）", wEmoji, wName, wMod * 100)
+        children[#children + 1] = UI.Panel {
+            width = "100%", padding = 5, borderRadius = 5, marginBottom = 2,
+            backgroundColor = isStormy and { 60, 20, 20, 220 } or { 40, 35, 15, 200 },
+            flexDirection = "row", alignItems = "center", gap = 4,
+            children = {
+                UI.Label { text = wText, fontSize = 9,
+                    fontColor = isStormy and { 255, 80, 80, 255 } or { 255, 200, 80, 255 } },
+            },
+        }
+    end
+
+    -- === 竞争对手状态条 ===
+    if gs.activeCompetitor and gs.activeCompetitor.daysLeft > 0 then
+        local comp = gs.activeCompetitor
+        children[#children + 1] = UI.Panel {
+            width = "100%", padding = 5, borderRadius = 5, marginBottom = 2,
+            backgroundColor = { 50, 20, 40, 210 },
+            flexDirection = "row", justifyContent = "space-between", alignItems = "center",
+            children = {
+                UI.Label {
+                    text = string.format("%s%s 在抢客！流量-%.0f%%",
+                        comp.emoji, comp.name, (comp.trafficSteal or 0.3) * 100),
+                    fontSize = 9, fontColor = { 255, 120, 180, 255 },
+                },
+                UI.Label {
+                    text = string.format("还剩%d天", comp.daysLeft),
+                    fontSize = 8, fontColor = { 200, 150, 200, 255 },
+                },
+            },
+        }
+    end
+
     -- 库存进度
     local invPct = gs.stallInventoryMax > 0 and gs.stallInventory / gs.stallInventoryMax or 0
     local invColor = invPct > 0.3 and colors.SUCCESS or colors.WARNING
@@ -349,7 +450,7 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
         flexDirection = "column", gap = 4, alignItems = "center",
         children = {
             UI.Label {
-                text = string.format("📦 %s%s  库存: %d / %d 份",
+                text = string.format("🔥 %s%s  存串: %d / %d 串",
                     item.emoji, item.name, gs.stallInventory, gs.stallInventoryMax),
                 fontSize = 12, fontColor = colors.TEXT_WHITE,
             },
@@ -361,11 +462,11 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
                 width = "100%", flexDirection = "row", justifyContent = "space-between",
                 children = {
                     UI.Label {
-                        text = string.format("已卖: %d份", gs.stallTotalSold),
+                        text = string.format("已卖: %d串", gs.stallTotalSold),
                         fontSize = 9, fontColor = colors.TEXT_DIM,
                     },
                     UI.Label {
-                        text = string.format("售价: $%d/份", item.unitPrice),
+                        text = string.format("售价: $%d/串", item.unitPrice),
                         fontSize = 9, fontColor = colors.TEXT_DIM,
                     },
                     UI.Label {
@@ -389,13 +490,13 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
     -- 口碑反馈文案
     local passiveDesc
     if trust < 15 then
-        passiveDesc = "刚起步，主要靠自己把第一波客人喊过来"
+        passiveDesc = "刚起步，路过的人偶尔会停下来看看"
     elseif trust < 30 then
-        passiveDesc = "有人记住你了，偶尔会自己回来找你买"
+        passiveDesc = "有人记住你了，开始有回头客自己找来"
     elseif trust < 50 then
         passiveDesc = "回头客正在形成，自然客流慢慢变稳"
     elseif trust < 70 then
-        passiveDesc = "口碑开始接管客流，不叫卖也能卖出一部分"
+        passiveDesc = "口碑开始接管客流，周边顾客主动找上门"
     elseif trust < 90 then
         passiveDesc = "周边已经传开了，摊位开始自带热度"
     else
@@ -411,7 +512,7 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
                 alignItems = "center",
                 children = {
                     UI.Label {
-                        text = string.format("%s 口碑: %s (%d)", trustInfo.emoji, trustInfo.name, trust),
+                        text = string.format("%s 口碑: %s (%d)", trustInfo.emoji, trustInfo.name, math.floor(trust)),
                         fontSize = 10, fontColor = trustColor,
                     },
                     UI.Label {
@@ -539,14 +640,14 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
             UI.Panel {
                 width = "100%", flexDirection = "row", justifyContent = "space-between",
                 children = {
-                    UI.Label { text = string.format("回头客 %d份", pSold), fontSize = 9, fontColor = colors.TEXT_WHITE },
+                    UI.Label { text = string.format("回头客 %d串", pSold), fontSize = 9, fontColor = colors.TEXT_WHITE },
                     UI.Label { text = string.format("+$%s", gs.formatMoney(pEarned)), fontSize = 9, fontColor = colors.CASH_GREEN },
                 },
             },
             UI.Panel {
                 width = "100%", flexDirection = "row", justifyContent = "space-between",
                 children = {
-                    UI.Label { text = string.format("自然来客 %d份", nSold), fontSize = 9, fontColor = colors.TEXT_WHITE },
+                    UI.Label { text = string.format("自然来客 %d串", nSold), fontSize = 9, fontColor = colors.TEXT_WHITE },
                     UI.Label { text = string.format("+$%s", gs.formatMoney(nEarned)), fontSize = 9, fontColor = colors.CASH_GREEN },
                 },
             },
@@ -612,7 +713,7 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
             children = {
                 UI.Label { text = string.format("观众 %d", gs.liveViewerCount or 0), fontSize = 9, fontColor = colors.TEXT_WHITE },
                 UI.Label { text = string.format("打赏 $%s", gs.formatMoney(gs.liveTipsEarned or 0)), fontSize = 9, fontColor = colors.GOLD },
-                UI.Label { text = string.format("带货 %d份", gs.liveOrdersSold or 0), fontSize = 9, fontColor = colors.CASH_GREEN },
+                UI.Label { text = string.format("带货 %d串", gs.liveOrdersSold or 0), fontSize = 9, fontColor = colors.CASH_GREEN },
             },
         },
     }
@@ -670,56 +771,289 @@ function BottomActions.buildStallingView(gs, config, colors, callbacks)
         children = liveChildren,
     }
 
-    -- 操作按钮
-    local actualHawkCost = item.energyCost
-    if gs.isSick and config.Health then
-        actualHawkCost = math.floor(item.energyCost * (config.Health.SICK_ENERGY_PENALTY or 1.5))
+    -- 操作按钮（直播 + 补货? + 收摊）
+    local mgmtLevel = gs.skills and gs.skills.management and gs.skills.management.level or 1
+    local canRestock = mgmtLevel >= 5 and (invPct < 0.5) and gs.stallInventory > 0
+    local btnChildren = {
+        UI.Button {
+            text = gs.isLiveStreaming and "📱 关直播" or "📱 开直播",
+            flex = 1, fontSize = 11, height = 40,
+            variant = gs.isLiveStreaming and "danger" or "warning",
+            onClick = function(self)
+                if callbacks.onAction then callbacks.onAction("toggle_livestream", {}) end
+            end,
+        },
+    }
+    if canRestock then
+        btnChildren[#btnChildren + 1] = UI.Button {
+            text = "补货 +",
+            flex = 1, fontSize = 11, height = 40,
+            variant = "primary",
+            onClick = function(self)
+                if callbacks.onAction then callbacks.onAction("restock_midstall", {}) end
+            end,
+        }
     end
-    local canHawk = gs.stallInventory > 0 and gs.energy >= actualHawkCost
+    btnChildren[#btnChildren + 1] = UI.Button {
+        text = gs.stallInventory <= 0 and "🏠 收摊（售罄）" or "🏠 收摊",
+        flex = 1, fontSize = 11, height = 40,
+        variant = gs.stallInventory <= 0 and "primary" or "ghost",
+        onClick = function(self)
+            if callbacks.onAction then callbacks.onAction("close_stall", {}) end
+        end,
+    }
     children[#children + 1] = UI.Panel {
-        width = "100%", flexDirection = "column", gap = 4, marginTop = 4,
-        children = {
-            UI.Button {
-                text = canHawk and string.format("📣 叫卖揽客（体力-%d·主动爆发拉客）", actualHawkCost)
-                    or (gs.stallInventory <= 0 and "库存卖完了" or "体力不足，先靠自然经营续住客流"),
-                width = "100%", fontSize = 12, height = 40, variant = canHawk and "primary" or "ghost",
-                disabled = not canHawk,
-                onClick = function(self)
-                    if callbacks.onAction then callbacks.onAction("hawk_sell", {}) end
-                end,
-            },
-            UI.Panel {
-                width = "100%", flexDirection = "row", gap = 4,
-                children = {
-                    UI.Button {
-                        text = gs.isLiveStreaming and "📱 关直播" or "📱 开直播",
-                        flex = 1, fontSize = 10, height = 32,
-                        variant = gs.isLiveStreaming and "danger" or "warning",
-                        onClick = function(self)
-                            if callbacks.onAction then callbacks.onAction("toggle_livestream", {}) end
-                        end,
+        width = "100%", flexDirection = "row", gap = 6, marginTop = 4,
+        children = btnChildren,
+    }
+
+    -- === 伙计状态卡片 ===
+    if gs.helper then
+        local h = gs.helper
+        local helperLevelNames = { "普通伙计", "熟练伙计", "老手伙计" }
+        local helperLevelColors = {
+            { 120, 180, 255, 255 },
+            { 100, 220, 160, 255 },
+            { 255, 200, 80, 255 },
+        }
+        local lv = math.max(1, math.min(3, h.level or 1))
+        local lvName = helperLevelNames[lv] or "伙计"
+        local lvColor = helperLevelColors[lv]
+        local statusText = gs.helperActive and "● 值守中" or "○ 待命"
+        local statusColor = gs.helperActive and colors.SUCCESS or colors.TEXT_DIM
+        local bgColor = gs.helperActive and { 16, 42, 26, 215 } or { 26, 28, 48, 200 }
+        local borderColor = gs.helperActive and { 60, 200, 100, 140 } or { 60, 65, 100, 100 }
+        local mood = h.mood or 80
+        local loyalty = h.loyalty or 60
+        local trait = h.trait or ""
+
+        children[#children + 1] = UI.Panel {
+            width = "100%", padding = 8, borderRadius = 8, marginTop = 4,
+            backgroundColor = bgColor,
+            borderWidth = 1, borderColor = borderColor,
+            flexDirection = "column", gap = 5,
+            children = {
+                -- 顶部：头像 + 姓名/等级/状态
+                UI.Panel {
+                    width = "100%", flexDirection = "row", alignItems = "center", gap = 8,
+                    children = {
+                        UI.Avatar {
+                            src = h.avatar or "",
+                            name = h.name,
+                            size = 46,
+                            shape = "circle",
+                            showBorder = true,
+                            status = gs.helperActive and "online" or "offline",
+                        },
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 2,
+                            children = {
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    alignItems = "center", gap = 5,
+                                    children = {
+                                        UI.Label { text = h.name, fontSize = 12, fontColor = colors.TEXT_WHITE },
+                                        UI.Panel {
+                                            paddingLeft = 5, paddingRight = 5,
+                                            paddingTop = 1, paddingBottom = 1,
+                                            backgroundColor = { 35, 45, 80, 200 },
+                                            borderRadius = 4,
+                                            children = {
+                                                UI.Label { text = lvName, fontSize = 8, fontColor = lvColor },
+                                            },
+                                        },
+                                        trait ~= "" and UI.Panel {
+                                            paddingLeft = 4, paddingRight = 4,
+                                            paddingTop = 1, paddingBottom = 1,
+                                            backgroundColor = { 55, 38, 18, 180 },
+                                            borderRadius = 4,
+                                            children = {
+                                                UI.Label { text = trait, fontSize = 8, fontColor = { 255, 175, 70, 255 } },
+                                            },
+                                        } or nil,
+                                    },
+                                },
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    justifyContent = "space-between",
+                                    children = {
+                                        UI.Label { text = statusText, fontSize = 9, fontColor = statusColor },
+                                        UI.Label {
+                                            text = string.format("⚡%.0f%%  💰$%d/天  📅%d天",
+                                                h.efficiency * 100, h.salary, h.daysWorked or 0),
+                                            fontSize = 8, fontColor = colors.TEXT_DIM,
+                                        },
+                                    },
+                                },
+                            },
+                        },
                     },
-                    UI.Button {
-                        text = "🏠 收摊",
-                        flex = 1, fontSize = 10, height = 32, variant = "ghost",
-                        onClick = function(self)
-                            if callbacks.onAction then callbacks.onAction("close_stall", {}) end
-                        end,
+                },
+                -- 中部：心情 + 忠诚度进度条
+                UI.Panel {
+                    width = "100%", flexDirection = "row", gap = 8,
+                    children = {
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 2,
+                            children = {
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    justifyContent = "space-between",
+                                    children = {
+                                        UI.Label { text = "😊 心情", fontSize = 7, fontColor = colors.TEXT_DIM },
+                                        UI.Label { text = tostring(mood), fontSize = 7, fontColor = { 255, 195, 60, 255 } },
+                                    },
+                                },
+                                UI.ProgressBar {
+                                    value = mood / 100,
+                                    width = "100%", height = 3, borderRadius = 2,
+                                    fillColor = { 255, 190, 60, 255 },
+                                },
+                            },
+                        },
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 2,
+                            children = {
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    justifyContent = "space-between",
+                                    children = {
+                                        UI.Label { text = "🤝 忠诚", fontSize = 7, fontColor = colors.TEXT_DIM },
+                                        UI.Label { text = tostring(loyalty), fontSize = 7, fontColor = { 100, 190, 255, 255 } },
+                                    },
+                                },
+                                UI.ProgressBar {
+                                    value = loyalty / 100,
+                                    width = "100%", height = 3, borderRadius = 2,
+                                    fillColor = { 80, 160, 255, 255 },
+                                },
+                            },
+                        },
+                    },
+                },
+                -- 底部：操作按钮
+                UI.Panel {
+                    width = "100%", flexDirection = "row", gap = 6,
+                    children = {
+                        UI.Button {
+                            text = gs.helperActive and "暂停值守" or "让TA看摊",
+                            fontSize = 9, height = 26, flex = 1,
+                            variant = gs.helperActive and "ghost" or "primary",
+                            onClick = function(self)
+                                if callbacks.onAction then
+                                    callbacks.onAction("toggle_helper_active", {})
+                                end
+                            end,
+                        },
+                        UI.Button {
+                            text = "解雇",
+                            fontSize = 9, height = 26,
+                            paddingLeft = 12, paddingRight = 12,
+                            variant = "danger",
+                            onClick = function(self)
+                                if callbacks.onAction then
+                                    callbacks.onAction("dismiss_helper", {})
+                                end
+                            end,
+                        },
                     },
                 },
             },
-        },
-    }
+        }
+    end
 
-    -- 提示
-    local tipText = not canHawk
-        and "💡 体力不足时自然来客和回头客会持续照顾生意，越晚人越少，趁早叫卖效果更好。"
-        or "💡 先用叫卖拉第一波，再靠口碑、名气、地点和直播把摊位经营成自带客流的生意。"
-    local tipColor = not canHawk and { 120, 200, 255, 255 } or colors.WARNING
+    -- === 同行生病社交事件通知 ===
+    if gs.pendingSocialEvent and gs.pendingSocialEvent.type == "sick_peer" then
+        local evt = gs.pendingSocialEvent
+        local donateAmt = math.max(
+            (config.Virtue and config.Virtue.SICK_PEER_MIN_DONATE or 200),
+            evt.estimatedIncome or 300)
+        children[#children + 1] = UI.Panel {
+            width = "100%", padding = 7, borderRadius = 6, marginTop = 2,
+            backgroundColor = { 40, 20, 50, 220 },
+            borderWidth = 1, borderColor = { 180, 100, 220, 120 },
+            flexDirection = "column", gap = 4,
+            children = {
+                UI.Label {
+                    text = string.format("💔 %s 今天生病了，一天没有收入……", evt.peerName),
+                    fontSize = 10, fontColor = { 255, 180, 220, 255 },
+                },
+                UI.Label {
+                    text = string.format("捐出 $%s → 善值+15、好感+10、名气+50、口碑+5", gs.formatMoney(donateAmt)),
+                    fontSize = 8, fontColor = { 200, 160, 240, 200 },
+                },
+                UI.Panel {
+                    width = "100%", flexDirection = "row", gap = 6,
+                    children = {
+                        UI.Button {
+                            text = string.format("捐出 $%s", gs.formatMoney(donateAmt)),
+                            flex = 1, fontSize = 10, height = 32, variant = "primary",
+                            onClick = function(self)
+                                if callbacks.onAction then
+                                    callbacks.onAction("donate_to_peer", { amount = donateAmt })
+                                end
+                            end,
+                        },
+                        UI.Button {
+                            text = "算了，先顾自己",
+                            flex = 1, fontSize = 10, height = 32, variant = "ghost",
+                            onClick = function(self)
+                                if callbacks.onAction then
+                                    callbacks.onAction("dismiss_social_event", {})
+                                end
+                            end,
+                        },
+                    },
+                },
+            },
+        }
+    end
+
+    -- 提示：根据口碑阶段给出策略建议
+    local tipText
+    local tipColor
+    if trust < 20 then
+        tipText = "💡 刚开始口碑低、客流少是正常的，坚持经营、参与随机事件，口碑会自然积累。"
+        tipColor = colors.TEXT_DIM
+    elseif trust < 50 then
+        tipText = "💡 口碑在成长中，促销活动和好位置能加速建立稳定客源，注意把握随机机会。"
+        tipColor = colors.ACCENT
+    else
+        tipText = "💡 口碑已打开，自然客流持续涌入。开直播可进一步放大流量，坚持到名气爆发！"
+        tipColor = colors.SUCCESS
+    end
     children[#children + 1] = UI.Label {
         text = tipText,
         fontSize = 9, fontColor = tipColor, textAlign = "center", marginTop = 4,
     }
+
+    -- === 善值/好感度小摘要 ===
+    local virtue = gs.virtue or 0
+    local goodwill = gs.goodwill or 0
+    if virtue > 0 or goodwill > 0 then
+        -- 找当前善值等级名称
+        local virtueLevel = { name = "普通人", emoji = "😐" }
+        if config.Virtue and config.Virtue.VIRTUE_LEVELS then
+            for _, lvl in ipairs(config.Virtue.VIRTUE_LEVELS) do
+                if virtue >= lvl.threshold then virtueLevel = lvl end
+            end
+        end
+        local goodBad = (gs.goodReviews or 0) > (gs.badReviews or 0) and "好评居多" or "差评偏多"
+        children[#children + 1] = UI.Panel {
+            width = "100%", flexDirection = "row", justifyContent = "space-between",
+            marginTop = 2, paddingLeft = 4, paddingRight = 4,
+            children = {
+                UI.Label {
+                    text = string.format("%s %s  善值%d", virtueLevel.emoji, virtueLevel.name, virtue),
+                    fontSize = 8, fontColor = { 180, 150, 255, 200 },
+                },
+                UI.Label {
+                    text = string.format("好感%d  %s", goodwill, goodBad),
+                    fontSize = 8, fontColor = { 150, 200, 255, 180 },
+                },
+            },
+        }
+    end
 
     return UI.Panel {
         id = "mainTab",
@@ -1060,6 +1394,225 @@ function BottomActions.buildLifeTab(gs, config, colors, callbacks)
     local H = config.Health
     local children = {}
 
+    -- === 朋友圈入口 ===
+    local hasMomentToday = false
+    if gs.lastMomentsPostDay then
+        for _, day in pairs(gs.lastMomentsPostDay) do
+            if day == (gs.currentDay or 1) then hasMomentToday = true; break end
+        end
+    end
+    local momentCount = gs.moments and #gs.moments or 0
+    children[#children + 1] = UI.Panel {
+        width = "100%", padding = 6, borderRadius = 6,
+        backgroundColor = { 30, 50, 40, 190 },
+        borderWidth = 1, borderColor = { 50, 180, 100, 100 },
+        flexDirection = "row", alignItems = "center", gap = 8,
+        children = {
+            UI.Label { text = "📱", fontSize = 20 },
+            UI.Panel {
+                flex = 1, flexDirection = "column", gap = 2,
+                children = {
+                    UI.Label { text = "朋友圈", fontSize = 12, fontColor = colors.TEXT_WHITE },
+                    UI.Label {
+                        text = momentCount > 0
+                            and string.format("已发 %d 条动态", momentCount)
+                            or "还没发过动态，赶紧晒晒~",
+                        fontSize = 9, fontColor = colors.TEXT_DIM,
+                    },
+                },
+            },
+            UI.Button {
+                text = hasMomentToday and "已发过" or "去发帖",
+                fontSize = 10, height = 30, paddingLeft = 10, paddingRight = 10,
+                variant = hasMomentToday and "ghost" or "primary",
+                onClick = function(self)
+                    if callbacks.onAction then callbacks.onAction("open_moments", {}) end
+                end,
+            },
+        },
+    }
+
+    -- 伙计区块：已雇 → 显示详情卡片；未雇 → 显示招募入口
+    if gs.helper then
+        local h = gs.helper
+        local helperLevelNames = { "普通伙计", "熟练伙计", "老手伙计" }
+        local helperLevelColors = {
+            { 120, 180, 255, 255 },
+            { 100, 220, 160, 255 },
+            { 255, 200, 80, 255 },
+        }
+        local lv = math.max(1, math.min(3, h.level or 1))
+        local lvName = helperLevelNames[lv] or "伙计"
+        local lvColor = helperLevelColors[lv]
+        local mood = h.mood or 80
+        local loyalty = h.loyalty or 60
+        local trait = h.trait or ""
+        local statusText = gs.helperActive and "值守中" or "待命"
+        local statusColor = gs.helperActive and colors.SUCCESS or colors.TEXT_DIM
+
+        children[#children + 1] = UI.Panel {
+            width = "100%", padding = 10, borderRadius = 8,
+            backgroundColor = { 22, 28, 50, 215 },
+            borderWidth = 1, borderColor = { 80, 70, 160, 140 },
+            flexDirection = "column", gap = 6,
+            children = {
+                -- 标题行
+                UI.Panel {
+                    width = "100%", flexDirection = "row",
+                    justifyContent = "space-between", alignItems = "center",
+                    children = {
+                        UI.Label { text = "👥 我的伙计", fontSize = 11, fontColor = colors.TEXT_DIM },
+                        UI.Label {
+                            text = statusText,
+                            fontSize = 10, fontColor = statusColor,
+                        },
+                    },
+                },
+                -- 主体：头像 + 信息
+                UI.Panel {
+                    width = "100%", flexDirection = "row", alignItems = "center", gap = 10,
+                    children = {
+                        UI.Avatar {
+                            src = h.avatar or "",
+                            name = h.name,
+                            size = 56,
+                            shape = "circle",
+                            showBorder = true,
+                            status = gs.helperActive and "online" or "offline",
+                        },
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 3,
+                            children = {
+                                -- 姓名 + 等级标签 + 特质标签
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    alignItems = "center", gap = 5,
+                                    children = {
+                                        UI.Label { text = h.name, fontSize = 13, fontColor = colors.TEXT_WHITE },
+                                        UI.Panel {
+                                            paddingLeft = 5, paddingRight = 5,
+                                            paddingTop = 2, paddingBottom = 2,
+                                            backgroundColor = { 35, 45, 80, 200 },
+                                            borderRadius = 4,
+                                            children = {
+                                                UI.Label { text = lvName, fontSize = 8, fontColor = lvColor },
+                                            },
+                                        },
+                                        trait ~= "" and UI.Panel {
+                                            paddingLeft = 4, paddingRight = 4,
+                                            paddingTop = 2, paddingBottom = 2,
+                                            backgroundColor = { 55, 38, 18, 180 },
+                                            borderRadius = 4,
+                                            children = {
+                                                UI.Label { text = trait, fontSize = 8, fontColor = { 255, 175, 70, 255 } },
+                                            },
+                                        } or nil,
+                                    },
+                                },
+                                -- 效率 / 日薪 / 工龄
+                                UI.Label {
+                                    text = string.format("⚡效率%.0f%%  💰日薪$%d  📅已工作%d天",
+                                        h.efficiency * 100, h.salary, h.daysWorked or 0),
+                                    fontSize = 9, fontColor = colors.TEXT_DIM, flexShrink = 1,
+                                },
+                                -- 简介
+                                h.desc and UI.Label {
+                                    text = h.desc,
+                                    fontSize = 8, fontColor = { 130, 140, 170, 255 }, flexShrink = 1,
+                                } or nil,
+                            },
+                        },
+                    },
+                },
+                -- 数值条：心情 / 忠诚
+                UI.Panel {
+                    width = "100%", flexDirection = "row", gap = 8,
+                    children = {
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 2,
+                            children = {
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    justifyContent = "space-between",
+                                    children = {
+                                        UI.Label { text = "😊 心情", fontSize = 8, fontColor = colors.TEXT_DIM },
+                                        UI.Label { text = tostring(mood), fontSize = 8, fontColor = { 255, 195, 60, 255 } },
+                                    },
+                                },
+                                UI.ProgressBar {
+                                    value = mood / 100,
+                                    width = "100%", height = 4, borderRadius = 2,
+                                    fillColor = { 255, 190, 60, 255 },
+                                },
+                            },
+                        },
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 2,
+                            children = {
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    justifyContent = "space-between",
+                                    children = {
+                                        UI.Label { text = "🤝 忠诚", fontSize = 8, fontColor = colors.TEXT_DIM },
+                                        UI.Label { text = tostring(loyalty), fontSize = 8, fontColor = { 100, 190, 255, 255 } },
+                                    },
+                                },
+                                UI.ProgressBar {
+                                    value = loyalty / 100,
+                                    width = "100%", height = 4, borderRadius = 2,
+                                    fillColor = { 80, 160, 255, 255 },
+                                },
+                            },
+                        },
+                    },
+                },
+                -- 解雇按钮
+                UI.Button {
+                    text = "解雇 TA",
+                    fontSize = 10, height = 28, width = "100%",
+                    variant = "danger",
+                    onClick = function(self)
+                        if callbacks.onAction then callbacks.onAction("dismiss_helper", {}) end
+                    end,
+                },
+            },
+        }
+    else
+        -- 无伙计 → 招募入口
+        local cooldown = gs.helperRecruitCooldown or 0
+        children[#children + 1] = UI.Panel {
+            width = "100%", padding = 6, borderRadius = 6,
+            backgroundColor = { 40, 30, 55, 180 },
+            borderWidth = 1, borderColor = { 120, 80, 180, 100 },
+            flexDirection = "row", alignItems = "center", gap = 8,
+            children = {
+                UI.Label { text = "🧑", fontSize = 20 },
+                UI.Panel {
+                    flex = 1, flexDirection = "column", gap = 2,
+                    children = {
+                        UI.Label { text = "雇个伙计", fontSize = 12, fontColor = colors.TEXT_WHITE },
+                        UI.Label {
+                            text = cooldown > 0
+                                and string.format("招募冷却中，还需 %d 天", cooldown)
+                                or "有伙计帮你看摊，你就能同时做其他事！",
+                            fontSize = 9, fontColor = colors.TEXT_DIM,
+                        },
+                    },
+                },
+                UI.Button {
+                    text = cooldown > 0 and string.format("冷却%d天", cooldown) or "发招募帖",
+                    fontSize = 10, height = 30, paddingLeft = 8, paddingRight = 8,
+                    variant = cooldown > 0 and "ghost" or "warning",
+                    onClick = function(self)
+                        if cooldown <= 0 and callbacks.onAction then
+                            callbacks.onAction("post_moments", { postType = "recruit" })
+                        end
+                    end,
+                },
+            },
+        }
+    end
+
     -- 健康状态面板
     local healthPct = (gs.health or 100) / 100
     local healthColor = (gs.health or 100) > 50 and { 120, 220, 180, 255 }
@@ -1181,7 +1734,7 @@ function BottomActions.buildLifeTab(gs, config, colors, callbacks)
                             fontSize = 11, fontColor = { 150, 225, 255, 255 },
                         },
                         UI.Label {
-                            text = "可选烤鱼摆摊，每条鱼可做3份",
+                            text = "自钓烤鱼改善伙食，提升心情+体力",
                             fontSize = 9, fontColor = { 120, 180, 210, 200 },
                         },
                     },
@@ -1369,5 +1922,511 @@ function BottomActions.financeRow(label, value, valueColor, colors)
         },
     }
 end
+
+-- ============================================================================
+-- 成长 Tab（技能训练 CD 系统）
+-- ============================================================================
+function BottomActions.buildGrowthTab(gs, config, colors, callbacks)
+    local skillPanel = SkillTrainingPanel.build(gs, config, colors, callbacks)
+    return UI.Panel {
+        id = "growthTab",
+        width = "100%", flexDirection = "column",
+        children = { skillPanel },
+    }
+end
+
+-- ============================================================================
+-- 朋友圈 Overlay
+-- ============================================================================
+function BottomActions.buildMomentsOverlay(gs, config, colors, callbacks)
+    local M = config.Moments or {}
+    local postTypes = M.POST_TYPES or {}
+    local currentDay = gs.currentDay or 1
+    local lastPost = gs.lastMomentsPostDay or {}
+
+    -- 发帖按钮列表
+    local postBtns = {}
+    local typeOrder = { "recruit", "checkin", "showoff", "vent", "advertise" }
+    for _, ptype in ipairs(typeOrder) do
+        local pt = postTypes[ptype]
+        if pt then
+            local postedToday = (lastPost[ptype] == currentDay)
+            postBtns[#postBtns + 1] = UI.Button {
+                text = pt.label .. (postedToday and " ✓" or ""),
+                width = "100%", height = 36, fontSize = 11,
+                variant = postedToday and "ghost" or "primary",
+                marginBottom = 4,
+                onClick = function(self)
+                    if not postedToday and callbacks.onAction then
+                        callbacks.onAction("post_moments", { postType = ptype })
+                    end
+                end,
+            }
+        end
+    end
+
+    -- 历史记录
+    local historyItems = {}
+    local moments = gs.moments or {}
+    for i = 1, math.min(3, #moments) do
+        local m = moments[i]
+        local pt = postTypes[m.type]
+        local label = pt and pt.label or m.type
+        historyItems[#historyItems + 1] = UI.Label {
+            text = string.format("第%d月第%d天  %s  👍%d", m.month or 1, m.day or 1, label, m.likes or 0),
+            fontSize = 9, fontColor = colors.TEXT_DIM,
+        }
+    end
+
+    return UI.Panel {
+        id = "momentsOverlay",
+        position = "absolute", top = 0, left = 0, right = 0, bottom = 0,
+        justifyContent = "center", alignItems = "center",
+        backgroundColor = { 0, 0, 0, 170 },
+        children = {
+            UI.Panel {
+                width = "92%", maxWidth = 380,
+                backgroundColor = { 20, 25, 40, 250 },
+                borderRadius = 12,
+                borderWidth = 1, borderColor = { 50, 180, 100, 180 },
+                flexDirection = "column", padding = 14, gap = 8,
+                children = {
+                    -- 标题
+                    UI.Panel {
+                        width = "100%", flexDirection = "row",
+                        justifyContent = "space-between", alignItems = "center",
+                        children = {
+                            UI.Label { text = "📱 发朋友圈", fontSize = 14, fontColor = colors.TEXT_WHITE },
+                            UI.Button {
+                                text = "✕", fontSize = 12, height = 28, width = 28,
+                                variant = "ghost",
+                                onClick = function(self)
+                                    if callbacks.onAction then callbacks.onAction("close_moments", {}) end
+                                end,
+                            },
+                        },
+                    },
+                    UI.Label {
+                        text = "选择你想发的内容（每种今天只能发一次）",
+                        fontSize = 10, fontColor = colors.TEXT_DIM,
+                    },
+                    -- 发帖按钮
+                    UI.Panel { width = "100%", flexDirection = "column", children = postBtns },
+                    -- 历史记录
+                    #historyItems > 0 and UI.Panel {
+                        width = "100%", flexDirection = "column", gap = 2,
+                        children = (function()
+                            local all = { UI.Label { text = "最近动态：", fontSize = 9, fontColor = colors.ACCENT } }
+                            for _, item in ipairs(historyItems) do all[#all + 1] = item end
+                            return all
+                        end)(),
+                    } or nil,
+                },
+            },
+        },
+    }
+end
+
+-- ============================================================================
+-- 候选人招募 Overlay
+-- ============================================================================
+function BottomActions.buildHelperCandidatesOverlay(gs, config, colors, callbacks)
+    local candidates = gs.helperCandidates or {}
+    local helperLevelNames = { "普通伙计", "熟练伙计", "老手伙计" }
+    local helperLevelColors = {
+        { 120, 180, 255, 255 },
+        { 100, 220, 160, 255 },
+        { 255, 200, 80, 255 },
+    }
+
+    local candidateCards = {}
+    for i, c in ipairs(candidates) do
+        local lv = math.max(1, math.min(3, c.level or 1))
+        local lvName = helperLevelNames[lv] or "伙计"
+        local lvColor = helperLevelColors[lv]
+        local mood = c.mood or 80
+        local loyalty = c.loyalty or 60
+        local trait = c.trait or ""
+        local desc = c.desc or ""
+        local canAfford = gs.cash >= c.salary
+
+        candidateCards[#candidateCards + 1] = UI.Panel {
+            width = "100%", padding = 10, borderRadius = 10, marginBottom = 8,
+            backgroundColor = { 22, 28, 48, 230 },
+            borderWidth = 1, borderColor = { 70, 90, 160, 150 },
+            flexDirection = "column", gap = 6,
+            children = {
+                -- 顶部：头像 + 姓名/等级/特质
+                UI.Panel {
+                    width = "100%", flexDirection = "row", alignItems = "center", gap = 10,
+                    children = {
+                        UI.Avatar {
+                            src = c.avatar or "",
+                            name = c.name,
+                            size = 52,
+                            shape = "circle",
+                            showBorder = true,
+                        },
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 3,
+                            children = {
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    alignItems = "center", gap = 6,
+                                    children = {
+                                        UI.Label {
+                                            text = c.name,
+                                            fontSize = 13, fontColor = colors.TEXT_WHITE,
+                                        },
+                                        UI.Panel {
+                                            paddingLeft = 6, paddingRight = 6,
+                                            paddingTop = 2, paddingBottom = 2,
+                                            backgroundColor = { 40, 50, 90, 200 },
+                                            borderRadius = 4,
+                                            children = {
+                                                UI.Label {
+                                                    text = lvName,
+                                                    fontSize = 9, fontColor = lvColor,
+                                                },
+                                            },
+                                        },
+                                        trait ~= "" and UI.Panel {
+                                            paddingLeft = 5, paddingRight = 5,
+                                            paddingTop = 2, paddingBottom = 2,
+                                            backgroundColor = { 60, 40, 20, 180 },
+                                            borderRadius = 4,
+                                            children = {
+                                                UI.Label {
+                                                    text = trait,
+                                                    fontSize = 9, fontColor = { 255, 180, 80, 255 },
+                                                },
+                                            },
+                                        } or nil,
+                                    },
+                                },
+                                UI.Label {
+                                    text = desc,
+                                    fontSize = 9, fontColor = colors.TEXT_DIM, flexShrink = 1,
+                                },
+                            },
+                        },
+                    },
+                },
+                -- 中部：数值条（心情 / 忠诚度）
+                UI.Panel {
+                    width = "100%", flexDirection = "row", gap = 8,
+                    children = {
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 2,
+                            children = {
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    justifyContent = "space-between",
+                                    children = {
+                                        UI.Label { text = "😊 心情", fontSize = 8, fontColor = colors.TEXT_DIM },
+                                        UI.Label { text = tostring(mood), fontSize = 8, fontColor = { 255, 200, 100, 255 } },
+                                    },
+                                },
+                                UI.ProgressBar {
+                                    value = mood / 100,
+                                    width = "100%", height = 4, borderRadius = 2,
+                                    fillColor = { 255, 190, 60, 255 },
+                                },
+                            },
+                        },
+                        UI.Panel {
+                            flex = 1, flexDirection = "column", gap = 2,
+                            children = {
+                                UI.Panel {
+                                    width = "100%", flexDirection = "row",
+                                    justifyContent = "space-between",
+                                    children = {
+                                        UI.Label { text = "🤝 忠诚", fontSize = 8, fontColor = colors.TEXT_DIM },
+                                        UI.Label { text = tostring(loyalty), fontSize = 8, fontColor = { 120, 200, 255, 255 } },
+                                    },
+                                },
+                                UI.ProgressBar {
+                                    value = loyalty / 100,
+                                    width = "100%", height = 4, borderRadius = 2,
+                                    fillColor = { 80, 160, 255, 255 },
+                                },
+                            },
+                        },
+                    },
+                },
+                -- 底部：效率 / 日薪 / 雇用按钮
+                UI.Panel {
+                    width = "100%", flexDirection = "row",
+                    alignItems = "center", gap = 6,
+                    children = {
+                        UI.Label {
+                            text = string.format("⚡ 效率 %.0f%%", c.efficiency * 100),
+                            fontSize = 10, fontColor = colors.ACCENT, flex = 1,
+                        },
+                        UI.Label {
+                            text = string.format("💰 日薪 $%d", c.salary),
+                            fontSize = 10, fontColor = colors.WARNING,
+                        },
+                        UI.Button {
+                            text = canAfford and "雇用 TA" or "资金不足",
+                            fontSize = 10, height = 30,
+                            paddingLeft = 12, paddingRight = 12,
+                            variant = canAfford and "primary" or "ghost",
+                            disabled = not canAfford,
+                            onClick = function(self)
+                                if callbacks.onAction then
+                                    callbacks.onAction("hire_helper", { candidateIndex = i })
+                                end
+                            end,
+                        },
+                    },
+                },
+            },
+        }
+    end
+
+    return UI.Panel {
+        id = "helperCandidatesOverlay",
+        position = "absolute", top = 0, left = 0, right = 0, bottom = 0,
+        justifyContent = "center", alignItems = "center",
+        backgroundColor = { 0, 0, 0, 175 },
+        children = {
+            UI.Panel {
+                width = "94%", maxWidth = 400,
+                backgroundColor = { 15, 20, 38, 252 },
+                borderRadius = 14,
+                borderWidth = 1, borderColor = { 100, 70, 200, 200 },
+                flexDirection = "column", padding = 14, gap = 6,
+                children = {
+                    -- 标题栏
+                    UI.Panel {
+                        width = "100%", flexDirection = "row",
+                        justifyContent = "space-between", alignItems = "center",
+                        marginBottom = 2,
+                        children = {
+                            UI.Label { text = "📢 招募伙计", fontSize = 15, fontColor = colors.TEXT_WHITE },
+                            UI.Button {
+                                text = "✕", fontSize = 12, height = 28, width = 28,
+                                variant = "ghost",
+                                onClick = function(self)
+                                    if callbacks.onAction then callbacks.onAction("close_helper_candidates", {}) end
+                                end,
+                            },
+                        },
+                    },
+                    UI.Label {
+                        text = "以下伙计看到你的招募帖，有意向来帮你！",
+                        fontSize = 9, fontColor = colors.TEXT_DIM, marginBottom = 4,
+                    },
+                    -- 候选人列表（可滚动）
+                    UI.ScrollView {
+                        width = "100%",
+                        height = #candidates > 2 and 380 or (#candidates * 155),
+                        scrollY = true,
+                        children = {
+                            UI.Panel {
+                                width = "100%", flexDirection = "column",
+                                children = candidateCards,
+                            },
+                        },
+                    },
+                    #candidates == 0 and UI.Label {
+                        text = "暂时没有人响应，过几天再试试吧…",
+                        fontSize = 11, fontColor = colors.WARNING, textAlign = "center",
+                        marginTop = 10, marginBottom = 10,
+                    } or nil,
+                },
+            },
+        },
+    }
+end
+
+-- [DeepSeek AI 顾问已移除]
+
+--[[REMOVED_buildAIAdvisorOverlay
+    local aiConfig = config.AIAdvisor or {}
+    local hasApiKey = (aiConfig.API_KEY or "") ~= ""
+    local questions = aiConfig.PRESET_QUESTIONS or {}
+    local chatHistory = (gs.aiChat and gs.aiChat.history) or {}
+    local isPending = gs.aiChat and gs.aiChat.isPending or false
+    local lastError = gs.aiChat and gs.aiChat.lastError
+
+    -- 聊天记录（最近6条）
+    local historyPanels = {}
+    local startIdx = math.max(1, #chatHistory - 5)
+    for i = startIdx, #chatHistory do
+        local msg = chatHistory[i]
+        local isUser = msg.role == "user"
+        historyPanels[#historyPanels + 1] = UI.Panel {
+            width = "100%", flexDirection = "row",
+            justifyContent = isUser and "flex-end" or "flex-start",
+            marginBottom = 4,
+            children = {
+                UI.Panel {
+                    maxWidth = "80%", padding = 7, borderRadius = 8,
+                    backgroundColor = isUser and { 50, 80, 160, 220 } or { 35, 42, 65, 220 },
+                    children = {
+                        UI.Label {
+                            text = (isUser and "你：" or "AI：") .. msg.content,
+                            fontSize = 10,
+                            fontColor = isUser and { 200, 220, 255, 255 } or { 200, 215, 235, 255 },
+                            flexShrink = 1,
+                        },
+                    },
+                },
+            },
+        }
+    end
+
+    -- 初始欢迎消息（无历史时显示）
+    if #historyPanels == 0 then
+        historyPanels[1] = UI.Panel {
+            width = "100%", padding = 8, borderRadius = 8,
+            backgroundColor = { 35, 42, 65, 220 },
+            children = {
+                UI.Label {
+                    text = "AI：你好！我是你的 DeepSeek 经营顾问。可以直接输入问题，或点击下方快捷提问！",
+                    fontSize = 10, fontColor = { 200, 215, 235, 255 }, flexShrink = 1,
+                },
+            },
+        }
+    end
+
+    -- 快捷问题按钮（紧凑型，2列网格）
+    local quickBtns = {}
+    for i, q in ipairs(questions) do
+        quickBtns[#quickBtns + 1] = UI.Button {
+            text = q.label,
+            flex = 1, height = 30, fontSize = 9,
+            variant = isPending and "ghost" or "secondary",
+            onClick = function(self)
+                if not isPending and callbacks.onAction then
+                    callbacks.onAction("ai_query", { questionIndex = i })
+                end
+            end,
+        }
+    end
+
+    -- 输入框（持有引用以便发送按钮读取）
+    local textFieldRef = nil
+    local function sendCustomText()
+        if not textFieldRef then return end
+        local val = textFieldRef:GetValue()
+        if val == nil or val == "" then return end
+        if not isPending and callbacks.onAction then
+            textFieldRef:Clear()
+            callbacks.onAction("ai_query", { customText = val })
+        end
+    end
+
+    local inputRow = UI.Panel {
+        width = "100%", flexDirection = "row", gap = 6, alignItems = "center",
+        children = {
+            UI.TextField {
+                flex = 1, height = 36, fontSize = 11,
+                placeholder = isPending and "AI 正在回复中…" or "输入你的问题…",
+                maxLength = 300,
+                disabled = isPending,
+                onSubmit = function(self, val)
+                    sendCustomText()
+                end,
+                -- 通过 onFocus 拿到 self 引用
+                onFocus = function(self)
+                    textFieldRef = self
+                end,
+                onChange = function(self, val)
+                    textFieldRef = self
+                end,
+            },
+            UI.Button {
+                text = isPending and "…" or "发送",
+                width = 52, height = 36, fontSize = 12,
+                variant = isPending and "ghost" or "primary",
+                onClick = function(self)
+                    sendCustomText()
+                end,
+            },
+        },
+    }
+
+    return UI.Panel {
+        id = "aiAdvisorOverlay",
+        position = "absolute", top = 0, left = 0, right = 0, bottom = 0,
+        justifyContent = "center", alignItems = "center",
+        backgroundColor = { 0, 0, 0, 170 },
+        children = {
+            UI.Panel {
+                width = "92%", maxWidth = 400,
+                backgroundColor = { 15, 20, 38, 252 },
+                borderRadius = 12,
+                borderWidth = 1, borderColor = { 60, 90, 200, 180 },
+                flexDirection = "column", padding = 12, gap = 8,
+                children = {
+                    -- 标题栏
+                    UI.Panel {
+                        width = "100%", flexDirection = "row",
+                        justifyContent = "space-between", alignItems = "center",
+                        children = {
+                            UI.Label { text = "🤖 DeepSeek 顾问", fontSize = 14, fontColor = { 160, 200, 255, 255 } },
+                            UI.Button {
+                                text = "✕", fontSize = 12, height = 28, width = 28,
+                                variant = "ghost",
+                                onClick = function(self)
+                                    if callbacks.onAction then callbacks.onAction("close_ai_advisor", {}) end
+                                end,
+                            },
+                        },
+                    },
+
+                    -- 无 API Key 提示
+                    not hasApiKey and UI.Panel {
+                        width = "100%", padding = 8, borderRadius = 6,
+                        backgroundColor = { 60, 40, 20, 200 },
+                        children = {
+                            UI.Label {
+                                text = "⚠️ 请在 GameConfig.AIAdvisor.API_KEY 中填写 DeepSeek API Key",
+                                fontSize = 10, fontColor = colors.WARNING, flexShrink = 1,
+                            },
+                        },
+                    } or nil,
+
+                    -- 聊天记录区（可滚动）
+                    UI.ScrollView {
+                        width = "100%", height = 200, scrollY = true,
+                        children = {
+                            UI.Panel {
+                                width = "100%", flexDirection = "column", gap = 0,
+                                children = historyPanels,
+                            },
+                        },
+                    },
+
+                    -- 错误提示
+                    lastError and UI.Label {
+                        text = "❌ " .. tostring(lastError),
+                        fontSize = 9, fontColor = colors.DANGER, flexShrink = 1,
+                    } or nil,
+
+                    -- 等待状态
+                    isPending and UI.Label {
+                        text = "⏳ AI 正在思考中…",
+                        fontSize = 10, fontColor = { 100, 160, 255, 255 }, textAlign = "center",
+                    } or nil,
+
+                    -- 快捷问题（2列网格）
+                    hasApiKey and UI.Panel {
+                        width = "100%",
+                        flexDirection = "row", flexWrap = "wrap", gap = 4,
+                        children = quickBtns,
+                    } or nil,
+
+                    -- 自由输入框 + 发送按钮
+                    hasApiKey and inputRow or nil,
+                },
+            },
+        },
+    }
+end
+]]
 
 return BottomActions

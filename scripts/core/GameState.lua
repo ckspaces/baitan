@@ -38,6 +38,9 @@ function GameState.init(config)
         GameState.skills[stype] = { level = 1, xp = 0 }
     end
 
+    -- 技能训练（CD系统）
+    GameState.training = nil    -- { skillType, courseId, courseName, emoji, totalSecs, remainSecs, xpReward, adSpeedUps }
+
     -- 声望与粉丝
     GameState.followers = 0
     GameState.reputation = 0
@@ -127,6 +130,32 @@ function GameState.init(config)
     -- 天气与季节
     GameState.currentSeason = "spring"
     GameState.currentWeather = "sunny"
+
+    -- === 善值与社交系统 ===
+    GameState.virtue = 0            -- 善值（助人行为积累）
+    GameState.goodwill = 0          -- 好感度（口碑/人缘）
+    GameState.totalDonated = 0      -- 累计捐出金额
+
+    -- === 同行竞争 ===
+    GameState.activeCompetitor = nil  -- { name, emoji, daysLeft, trafficSteal } 竞争对手临时事件
+
+    -- === 顾客评价 ===
+    GameState.recentReviews = {}    -- 最近评价列表 { {type="good"/"bad", text, time} }
+    GameState.goodReviews = 0       -- 好评累计
+    GameState.badReviews = 0        -- 差评累计
+
+    -- === 社交事件待处理 ===
+    GameState.pendingSocialEvent = nil  -- { type, peerName, estimatedIncome, dayTriggered }
+
+    -- === 伙计系统 ===
+    GameState.helper = nil              -- nil 或 { name, level, salary, efficiency, daysWorked }
+    GameState.helperActive = false      -- 伙计是否正在值守摊位
+    GameState.helperRecruitCooldown = 0 -- 招募冷却天数
+
+    -- === 朋友圈系统 ===
+    GameState.moments = {}              -- { {type, day, month, likes} }，最多10条
+    GameState.helperCandidates = nil    -- 招募时生成的候选人列表
+    GameState.lastMomentsPostDay = {}   -- { [type]=day } 防止同天重复发帖
 
     -- 健康系统
     GameState.isSick = false          -- 是否生病
@@ -275,7 +304,8 @@ function GameState.toSaveData()
     data.energy = GameState.energy
     data.mood = GameState.mood
     data.health = GameState.health
-    data.skills = GameState.skills
+    data.skills   = GameState.skills
+    data.training = GameState.training
     data.followers = GameState.followers
     data.reputation = GameState.reputation
     -- 名气
@@ -385,6 +415,12 @@ function GameState.fromSaveData(data)
     if GameState.fishStock == nil then GameState.fishStock = 0 end
     -- 兼容旧存档（行动槽）
     if GameState.actionsToday == nil then GameState.actionsToday = 0 end
+    -- 兼容旧存档（伙计/朋友圈/AI顾问）
+    if GameState.helper == nil then GameState.helper = nil end
+    if GameState.helperActive == nil then GameState.helperActive = false end
+    if GameState.helperRecruitCooldown == nil then GameState.helperRecruitCooldown = 0 end
+    if GameState.moments == nil then GameState.moments = {} end
+    if GameState.lastMomentsPostDay == nil then GameState.lastMomentsPostDay = {} end
     return true
 end
 

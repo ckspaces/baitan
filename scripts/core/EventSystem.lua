@@ -382,6 +382,88 @@ local EVENT_POOL = {
             gs.addMessage(string.format("贵人相助 +$%s！", gs.formatMoney(gift)), "success")
         end,
     },
+    -- ========================================================================
+    -- 竞争与社交事件
+    -- ========================================================================
+    {
+        name = "同行在附近摆摊",
+        desc = "附近来了个同类摊位，抢走了不少客流，接下来几天要难熬了。",
+        type = "negative", prob = 0.10, minMonth = 2,
+        condition = function(gs) return not gs.activeCompetitor or gs.activeCompetitor.daysLeft <= 0 end,
+        apply = function(gs)
+            local names = { "老张", "李师傅", "王大姐", "赵老板", "陈记", "刘三哥", "小吴", "周记摊" }
+            local emojis = { "😤", "😎", "🙃", "😏", "🤑", "😡", "😤", "🤔" }
+            local idx = math.random(#names)
+            gs.activeCompetitor = {
+                name = names[idx],
+                emoji = emojis[idx],
+                daysLeft = 3,
+                trafficSteal = 0.30,
+            }
+            gs.mood = math.max(0, gs.mood - 8)
+            gs.addMessage(string.format(
+                "⚠️ %s%s 在附近开摊了！客流被分走约30%%，持续3天。",
+                emojis[idx], names[idx]), "warning")
+        end,
+    },
+    {
+        name = "竞争对手恶意竞争",
+        desc = "对方低价倾销，大幅抢走你的回头客，太难了。",
+        type = "negative", prob = 0.06, minMonth = 3,
+        condition = function(gs) return not gs.activeCompetitor or gs.activeCompetitor.daysLeft <= 0 end,
+        apply = function(gs)
+            local names = { "老张", "李师傅", "王大姐", "赵老板", "陈记", "刘三哥", "小吴", "周记摊" }
+            local emojis = { "😤", "😎", "🙃", "😏", "🤑", "😡", "😤", "🤔" }
+            local idx = math.random(#names)
+            gs.activeCompetitor = {
+                name = names[idx],
+                emoji = emojis[idx],
+                daysLeft = 5,
+                trafficSteal = 0.45,
+            }
+            gs.stallTrust = math.max(0, (gs.stallTrust or 0) - 5)
+            gs.addMessage(string.format(
+                "😡 %s%s 低价恶性竞争！客流被抢走45%%，持续5天，信任度-5。",
+                emojis[idx], names[idx]), "danger")
+        end,
+    },
+    {
+        name = "同行主动和解",
+        desc = "竞争对手主动找你谈，大家约定各做各的，不互相挖墙脚。",
+        type = "positive", prob = 0.08, minMonth = 3,
+        condition = function(gs) return gs.activeCompetitor and gs.activeCompetitor.daysLeft > 0 end,
+        apply = function(gs)
+            if gs.activeCompetitor then
+                local name = (gs.activeCompetitor.emoji or "") .. (gs.activeCompetitor.name or "同行")
+                gs.activeCompetitor = nil
+                gs.virtue = (gs.virtue or 0) + 3
+                gs.goodwill = (gs.goodwill or 0) + 5
+                gs.mood = math.min(100, gs.mood + 10)
+                gs.addMessage(string.format(
+                    "🤝 %s 主动求和！竞争结束，好感度+5，心情+10，善值+3。", name), "success")
+            end
+        end,
+    },
+    {
+        name = "同行突然生病",
+        desc = "附近摊主突然病倒，今天的收益是否捐出去给他？这件事周围的人都会看在眼里……",
+        type = "neutral", prob = 0.07, minMonth = 2,
+        condition = function(gs) return not gs.pendingSocialEvent end,
+        apply = function(gs)
+            local names = { "老王", "李大哥", "张姐", "陈老板", "刘叔", "赵姐" }
+            local peerName = names[math.random(#names)]
+            -- 预估今日收益（按当前熟练度和信任度粗算）
+            local estimated = math.max(200, math.floor((gs.stallTrust or 0) * 15 + 300))
+            gs.pendingSocialEvent = {
+                type = "sick_peer",
+                peerName = peerName,
+                estimatedIncome = estimated,
+                dayTriggered = gs.currentMonth * 10 + gs.currentDay,
+            }
+            gs.addMessage(string.format(
+                "💔 摊主%s今天突然病倒了，一天收益没了……你会帮他吗？（查看社交面板）", peerName), "warning")
+        end,
+    },
 }
 
 -- ============================================================================

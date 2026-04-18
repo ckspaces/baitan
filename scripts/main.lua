@@ -19,9 +19,12 @@ local SaveSystem = require("core.SaveSystem")
 
 -- UI 模块
 local UIManager = require("ui.UIManager")
+local BottomActions = require("ui.BottomActions")
 local SceneRenderer = require("scenes.SceneRenderer")
-local GrillMiniGame = require("ui.GrillMiniGame")
 local FishingMiniGame = require("ui.FishingMiniGame")
+local SkillTrainingSystem = require("core.SkillTrainingSystem")
+local SkillTrainingPanel = require("ui.SkillTrainingPanel")
+local HelperSystem = require("core.HelperSystem")
 
 -- 注册所有场景
 local ShopScene = require("scenes.ShopScene")
@@ -52,7 +55,7 @@ function Start()
     graphics.windowTitle = config.Game.TITLE
     math.randomseed(os.time())
 
-    -- 1. 初始化 UI 系统
+    -- 1. 初始化 UI 系统（无论单机/网络都先初始化）
     UI.Init({
         fonts = {
             { family = "sans", weights = {
@@ -62,32 +65,135 @@ function Start()
         scale = UI.Scale.DESIGN_RESOLUTION(450, 800),
     })
 
-    -- 2. 初始化游戏状态（优先加载存档）
-    local loaded = SaveSystem.load(config)
-    if loaded then
-        gs.addMessage("存档已加载！继续你的创业之旅", "success")
-        gs.addMessage(string.format("当前第%d年 %d月", gs.year, gs.monthInYear), "info")
+    -- 2. 订阅帧更新（必须最早注册）
+    SubscribeToEvent("Update", "HandleUpdate")
+
+    -- 3. 根据运行模式分支
+    if IsNetworkMode and IsNetworkMode() then
+        -- ── 网络/常驻服务器模式 ──────────────────────────────────
+        -- 服务器发来 SaveDataLoad 时再真正初始化游戏
+        SubscribeToEvent("SaveDataLoad",         "HandleSaveDataLoad")
+        SubscribeToEvent("ServerDisconnected",   "HandleServerDisconnected")
+        -- 显示等待界面
+        ShowNetworkLoadingScreen()
+        print("=== 摆摊大亨 客户端启动（网络模式，等待云端存档） ===")
+    else
+        -- ── 单机模式 ─────────────────────────────────────────────
+        local loaded = SaveSystem.load(config)
+        if loaded then
+            gs.addMessage("存档已加载！继续你的创业之旅", "success")
+            gs.addMessage(string.format("当前第%d年 %d月", gs.year, gs.monthInYear), "info")
+        else
+            gs.init(config)
+            gs.addMessage("欢迎来到摆摊大亨！从小摊做起，成就商业帝国！", "info")
+            gs.addMessage("从摆摊开始，一步步做大做强吧！", "info")
+        end
+        InitGameUI()
+        print("=== 摆摊大亨 游戏启动（单机模式） ===")
+    end
+end
+
+-- ============================================================================
+-- 网络模式：等待服务器存档加载界面
+-- ============================================================================
+
+function ShowNetworkLoadingScreen()
+    local root = UIManager.getRoot and UIManager.getRoot()
+    -- getRoot 可能为 nil（UI 还没 build），用一个简单的 Panel 覆盖
+    if not root then
+        -- 先 build 一个空根节点以便后续 overlay
+        gs.init(config)
+        UIManager.build(gs, config, SceneRenderer, { onAction = HandleAction })
+        root = UIManager.getRoot()
+    end
+    if not root then return end
+
+    local old = root:FindById("networkLoadingOverlay")
+    if old then old:Remove() end
+
+    local overlay = UI.Panel {
+        id = "networkLoadingOverlay",
+        position = "absolute",
+        top = 0, left = 0, right = 0, bottom = 0,
+        justifyContent = "center",
+        alignItems = "center",
+        backgroundColor = { 20, 15, 10, 240 },
+        children = {
+            UI.Panel {
+                gap = 14, alignItems = "center",
+                children = {
+                    UI.Label { text = "🔥", fontSize = 48 },
+                    UI.Label {
+                        text = "摆摊大亨",
+                        fontSize = 22,
+                        fontColor = { 255, 200, 80, 255 },
+                    },
+                    UI.Label {
+                        text = "正在连接服务器，加载存档...",
+                        fontSize = 12,
+                        fontColor = { 200, 190, 170, 255 },
+                    },
+                },
+            },
+        },
+    }
+    root:AddChild(overlay)
+end
+
+-- ============================================================================
+-- 网络模式：服务器发来存档数据
+-- ============================================================================
+
+function HandleSaveDataLoad(eventType, eventData)
+    local saveJson = eventData["data"]:GetString()
+    local hasData  = eventData["has_save"]:GetBool()
+
+    -- 注入服务器连接（用于后续 SaveSystem.save() 上传）
+    if network and network.serverConnection then
+        SaveSystem.setServerConnection(network.serverConnection)
+    end
+
+    -- 加载游戏状态
+    if hasData then
+        local loaded = SaveSystem.loadFromJson(config, saveJson)
+        if loaded then
+            gs.addMessage("☁️ 云端存档已加载！继续创业之旅", "success")
+            gs.addMessage(string.format("当前第%d年 %d月", gs.year, gs.monthInYear), "info")
+        else
+            gs.init(config)
+            gs.addMessage("存档解析异常，以新游戏启动", "warning")
+        end
     else
         gs.init(config)
         gs.addMessage("欢迎来到摆摊大亨！从小摊做起，成就商业帝国！", "info")
         gs.addMessage("从摆摊开始，一步步做大做强吧！", "info")
     end
 
-    -- 3. 构建 UI
-    UIManager.build(gs, config, SceneRenderer, {
-        onAction = HandleAction,
-    })
+    -- 移除加载界面，初始化正式 UI
+    local root = UIManager.getRoot and UIManager.getRoot()
+    if root then
+        local ol = root:FindById("networkLoadingOverlay")
+        if ol then ol:Remove() end
+    end
 
-    -- 4. 初始化音频
+    InitGameUI()
+    print("=== 摆摊大亨 游戏初始化完成（云端存档模式） ===")
+end
+
+-- 断线处理：清除服务器连接引用，回退到本地存档
+function HandleServerDisconnected(eventType, eventData)
+    SaveSystem.clearServerConnection()
+    gs.addMessage("⚠️ 与服务器断开连接，存档暂时保存到本地", "warning")
+end
+
+-- ============================================================================
+-- 公共初始化（单机/网络通用，在 GameState 就绪后调用）
+-- ============================================================================
+
+function InitGameUI()
+    UIManager.build(gs, config, SceneRenderer, { onAction = HandleAction })
     AudioManager.init()
-
-    -- 5. 播放主题 BGM
     AudioManager.playBGM("audio/music_1776264521002.ogg", 0.4)
-
-    -- 6. 订阅事件
-    SubscribeToEvent("Update", "HandleUpdate")
-
-    print("=== 摆摊大亨 游戏启动 ===")
 end
 
 function Stop()
@@ -109,6 +215,18 @@ function HandleUpdate(eventType, eventData)
         local changed = StallSystem.updateRealtime(gs, config, dt)
         if changed then
             UIManager.refresh(gs, config, { onAction = HandleAction })
+        end
+    end
+
+    -- 更新技能训练 CD（实时倒计时）
+    if SkillTrainingSystem.isTraining(gs) then
+        local justCompleted = SkillTrainingSystem.updateTraining(gs, config, dt)
+        if justCompleted then
+            -- 训练完成，全量刷新以显示"领取奖励"按钮
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+        else
+            -- 训练进行中，轻量级更新进度条（避免每帧全量重建）
+            SkillTrainingPanel.tickUpdate(UIManager.getRoot(), gs)
         end
     end
 
@@ -539,60 +657,244 @@ function HandleAction(actionType, data)
         end
         UIManager.refresh(gs, config, { onAction = HandleAction })
         return
+    elseif actionType == "restock_midstall" then
+        -- 摊中补货（管理技能Lv5+，不消耗回合，只扣钱）
+        local ok = StallSystem.restockMidStall(gs, config)
+        if ok then
+            AudioManager.playSFX("audio/sfx/sfx_cash_register.ogg", 0.5)
+            SaveSystem.save()
+        end
+        UIManager.refresh(gs, config, { onAction = HandleAction })
+        return
+    elseif actionType == "donate_to_peer" then
+        -- 捐款给生病同行
+        local evt = gs.pendingSocialEvent
+        if not evt or evt.type ~= "sick_peer" then
+            gs.addMessage("没有待处理的社交事件", "warning")
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            return
+        end
+        local donateAmt = data.amount or evt.estimatedIncome or 300
+        if gs.cash < donateAmt then
+            gs.addMessage(string.format("资金不足，无法捐出 $%d", donateAmt), "warning")
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            return
+        end
+        -- 扣款
+        gs.cash = gs.cash - donateAmt
+        gs.totalDonated = (gs.totalDonated or 0) + donateAmt
+        -- 善值奖励
+        local V = config.Virtue or {}
+        gs.virtue = (gs.virtue or 0) + (V.DONATE_VIRTUE_GAIN or 15)
+        gs.goodwill = (gs.goodwill or 0) + (V.DONATE_GOODWILL_GAIN or 10)
+        gs.fame = (gs.fame or 0) + (V.DONATE_FAME_GAIN or 50)
+        gs.stallTrust = math.min(100, (gs.stallTrust or 0) + (V.DONATE_TRUST_GAIN or 5))
+        gs.mood = math.min(100, (gs.mood or 0) + 12)
+        gs.pendingSocialEvent = nil
+        gs.addMessage(string.format(
+            "💗 你捐出了 $%d 给%s！善值+%d，好感+%d，名气+%d，口碑+%d，心情+12",
+            donateAmt, evt.peerName,
+            V.DONATE_VIRTUE_GAIN or 15, V.DONATE_GOODWILL_GAIN or 10,
+            V.DONATE_FAME_GAIN or 50, V.DONATE_TRUST_GAIN or 5), "success")
+        AudioManager.playSFX("audio/sfx/sfx_level_up.ogg", 0.6)
+        SaveSystem.save()
+        UIManager.refresh(gs, config, { onAction = HandleAction })
+        return
+    elseif actionType == "dismiss_social_event" then
+        -- 忽略社交事件（不捐款，轻微心情影响）
+        if gs.pendingSocialEvent then
+            local evt2 = gs.pendingSocialEvent
+            gs.pendingSocialEvent = nil
+            gs.mood = math.max(0, (gs.mood or 0) - 5)
+            gs.addMessage(string.format("你选择了先顾好自己，%s的事只能靠他自己了……（心情-5）", evt2.peerName or "同行"), "info")
+        end
+        UIManager.refresh(gs, config, { onAction = HandleAction })
+        return
     end
 
-    -- === 摆摊中拦截：除了叫卖，其他消耗回合的行动都不允许 ===
-    if gs.isStalling and actionType ~= "hawk_sell" then
-        gs.addMessage("正在营业中！先收摊才能做其他事", "warning")
+    -- === 伙计 / 朋友圈 / AI顾问 相关（无论是否摆摊均可操作）===
+
+    -- 打开朋友圈 overlay
+    if actionType == "open_moments" then
+        ShowMomentsOverlay()
+        return
+    -- 关闭朋友圈 overlay
+    elseif actionType == "close_moments" then
+        local root = UIManager.getRoot()
+        if root then
+            local o = root:FindById("momentsOverlay")
+            if o then o:Remove() end
+        end
+        return
+    -- 发朋友圈帖子
+    elseif actionType == "post_moments" then
+        local postType = data.postType or "checkin"
+        local M = config.Moments or {}
+        local pTypes = M.POST_TYPES or {}
+        local pt = pTypes[postType]
+        if not pt then
+            gs.addMessage("无效的帖子类型", "warning")
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            return
+        end
+        -- 防止同天重复发相同类型帖子
+        local today = gs.currentDay
+        if gs.lastMomentsPostDay and gs.lastMomentsPostDay[postType] == today then
+            gs.addMessage("今天已经发过这类帖子了，明天再来吧", "warning")
+            -- 关闭 overlay 后刷新
+            local root = UIManager.getRoot()
+            if root then
+                local o = root:FindById("momentsOverlay")
+                if o then o:Remove() end
+            end
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            return
+        end
+        -- 扣费（如宣传推广 cost=50）
+        if (pt.cost or 0) > 0 then
+            if gs.cash < pt.cost then
+                gs.addMessage(string.format("资金不足，发帖需要 $%d", pt.cost), "warning")
+                UIManager.refresh(gs, config, { onAction = HandleAction })
+                return
+            end
+            gs.cash = gs.cash - pt.cost
+        end
+        -- 应用效果
+        if (pt.fameGain or 0) > 0 then
+            gs.fame = (gs.fame or 0) + pt.fameGain
+        end
+        if (pt.followerGain or 0) > 0 then
+            gs.followers = (gs.followers or 0) + pt.followerGain
+        end
+        if (pt.moodGain or 0) > 0 then
+            gs.mood = math.min(config.Player.MAX_MOOD or 100, (gs.mood or 0) + pt.moodGain)
+        end
+        if (pt.repLoss or 0) > 0 then
+            gs.stallTrust = math.max(0, (gs.stallTrust or 50) - pt.repLoss)
+        end
+        -- 记录朋友圈历史
+        if not gs.moments then gs.moments = {} end
+        table.insert(gs.moments, 1, {
+            type = postType,
+            label = pt.label,
+            day = gs.currentDay,
+            month = gs.currentMonth,
+            likes = math.random(3, 30),
+        })
+        if #gs.moments > (M.MAX_HISTORY or 10) then
+            table.remove(gs.moments, #gs.moments)
+        end
+        -- 记录当天已发
+        if not gs.lastMomentsPostDay then gs.lastMomentsPostDay = {} end
+        gs.lastMomentsPostDay[postType] = today
+        -- 招募帖：生成候选人并打开候选人 overlay
+        if postType == "recruit" then
+            -- 检查是否有伙计冷却
+            local H = config.Helper or {}
+            if (gs.helperRecruitCooldown or 0) > 0 then
+                gs.addMessage(string.format("招募冷却中，还需 %d 天才能再招", gs.helperRecruitCooldown), "warning")
+                UIManager.refresh(gs, config, { onAction = HandleAction })
+                return
+            end
+            gs.helperCandidates = HelperSystem.generateCandidates(gs, config)
+            gs.addMessage("📢 招募启事发出！有 " .. #gs.helperCandidates .. " 人感兴趣，快来挑选吧", "success")
+            SaveSystem.save()
+            -- 关闭朋友圈 overlay，打开候选人 overlay
+            local root = UIManager.getRoot()
+            if root then
+                local o = root:FindById("momentsOverlay")
+                if o then o:Remove() end
+            end
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            ShowHelperCandidatesOverlay()
+        else
+            local successMsgs = M.SUCCESS_MSGS or {}
+            local msg = successMsgs[postType] or string.format("✅ 帖子发布成功！%s", pt.label)
+            gs.addMessage(msg, "success")
+            SaveSystem.save()
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            -- 关闭 overlay
+            local root = UIManager.getRoot()
+            if root then
+                local o = root:FindById("momentsOverlay")
+                if o then o:Remove() end
+            end
+        end
+        return
+
+    -- 雇用伙计
+    elseif actionType == "hire_helper" then
+        local idx = data.candidateIndex or 1
+        local ok, err = HelperSystem.hireHelper(gs, config, idx)
+        if ok then
+            AudioManager.playSFX("audio/sfx/sfx_level_up.ogg", 0.6)
+        else
+            gs.addMessage(err or "雇用失败", "warning")
+        end
+        SaveSystem.save()
+        local root = UIManager.getRoot()
+        if root then
+            local o = root:FindById("helperCandidatesOverlay")
+            if o then o:Remove() end
+        end
+        UIManager.refresh(gs, config, { onAction = HandleAction })
+        return
+
+    -- 解雇伙计
+    elseif actionType == "dismiss_helper" then
+        HelperSystem.dismissHelper(gs, config)
+        SaveSystem.save()
+        UIManager.refresh(gs, config, { onAction = HandleAction })
+        return
+
+    -- 切换伙计值守状态
+    elseif actionType == "toggle_helper_active" then
+        if not gs.helper then
+            gs.addMessage("还没有雇用伙计", "warning")
+        elseif not gs.isStalling then
+            gs.addMessage("只有摆摊时才能让伙计值守", "warning")
+        else
+            gs.helperActive = not gs.helperActive
+            if gs.helperActive then
+                gs.addMessage(string.format("✅ %s 开始看摊，你现在可以去做其他事了！", gs.helper.name), "success")
+            else
+                gs.addMessage(string.format("⏸️ %s 暂停值守", gs.helper.name), "info")
+            end
+            SaveSystem.save()
+        end
+        UIManager.refresh(gs, config, { onAction = HandleAction })
+        return
+
+    -- 关闭候选人 overlay
+    elseif actionType == "close_helper_candidates" then
+        local root = UIManager.getRoot()
+        if root then
+            local o = root:FindById("helperCandidatesOverlay")
+            if o then o:Remove() end
+        end
+        return
+
+    end
+
+    -- === 摆摊中拦截：技能训练 / 伙计值守 可在摆摊时同步进行，其他消耗回合的行动不允许 ===
+    local isTrainingAction = actionType == "training_start"
+        or actionType == "training_claim"
+        or actionType == "training_speedup_ad"
+    -- 有伙计值守时，允许生活/成长/财务类行动（不消耗摆摊回合）
+    local helperExempt = (gs.helperActive == true) and (
+        actionType == "rest" or actionType == "relax" or actionType == "feast" or
+        actionType == "go_hospital" or actionType == "go_pharmacy" or
+        actionType == "go_fishing" or actionType == "go_supermarket" or
+        actionType == "repay" or actionType == "borrow"
+    )
+    if gs.isStalling and not isTrainingAction and not helperExempt then
+        gs.addMessage("正在营业中！先收摊才能做其他事（或让伙计看摊）", "warning")
         UIManager.refresh(gs, config, { onAction = HandleAction })
         return
     end
 
     -- === 消耗回合的行动分发 ===
-    if actionType == "hawk_sell" then
-        -- 弹出烤串小游戏，完成后执行叫卖
-        local root = UIManager.getRoot()
-        if root then
-            GrillMiniGame.show(root, function(multiplier, resultText)
-                -- 获取当前商品名（用于对话系统）
-                local items = ProgressionSystem.getCurrentItems(gs, config)
-                local curItem = items[gs.stallItemIndex] or items[1]
-                local itemName = curItem and curItem.name or "小吃"
-
-                -- 小游戏完成回调：执行实际叫卖
-                local ok = StallSystem.hawkSell(gs, config, multiplier)
-                if ok then
-                    AudioManager.playSFX("audio/sfx/sfx_cash_register.ogg", 0.7)
-                end
-                -- 叫卖中触发摊位场景事件（不推进天数，收摊才推进；有上下文事件不再触发全局事件）
-                EventSystem.rollContextEvent(gs, config, gs.isLiveStreaming and "livestream" or "stall")
-                StallSystem.tickPromotion(gs, config)
-                SaveSystem.save()
-                UpdateBGM()
-                if gs.phase ~= "playing" then
-                    ShowEndScreen()
-                end
-                UIManager.refresh(gs, config, { onAction = HandleAction })
-
-                -- 检查城管对话弹窗（优先于顾客对话）
-                if gs.pendingChengguan and gs.phase == "playing" then
-                    ShowChengguanDialogue()
-                -- 检查顾客对话弹窗（叫卖成功且仍在营业中时）
-                elseif ok and gs.phase == "playing" and gs.isStalling then
-                    local dialogue = StallSystem.rollCustomerDialogue(gs, config, itemName)
-                    if dialogue then
-                        ShowCustomerDialogue(dialogue)
-                    end
-                end
-
-                -- 检查微信事件弹窗
-                if gs.pendingWechatEvent and gs.phase == "playing" then
-                    ShowWechatEventPopup(gs.pendingWechatEvent)
-                end
-            end)
-        end
-        return  -- 异步处理，提前返回
-    elseif actionType == "rest" then
+    if actionType == "rest" then
         success = PlayerSystem.rest(gs, config)
         if success then gs.currentScene = "rest" end
     elseif actionType == "relax" then
@@ -688,6 +990,52 @@ function HandleAction(actionType, data)
         success = PlayerSystem.repay(gs, data.amount, config)
     elseif actionType == "borrow" then
         success = PlayerSystem.borrow(gs, data.amount, config)
+
+    -- ── 技能训练 ──────────────────────────────────────────
+    elseif actionType == "training_start" then
+        -- 开始训练课程（扣费、设置CD），不消耗行动槽
+        -- startTraining 内部已调用 gs.addMessage，失败时才额外提示
+        local ok, err = SkillTrainingSystem.startTraining(gs, config, data.skillType, data.courseIdx)
+        if not ok then
+            gs.addMessage(err or "无法开始训练", "warning")
+        end
+        UIManager.refresh(gs, config, { onAction = HandleAction })
+        return
+
+    elseif actionType == "training_claim" then
+        -- 领取训练奖励（不消耗行动槽）
+        -- claimTraining 内部已调用 gs.addMessage 处理升级/经验消息
+        local ok, err = SkillTrainingSystem.claimTraining(gs, config)
+        if not ok then
+            gs.addMessage(err or "训练尚未完成", "warning")
+        end
+        UIManager.refresh(gs, config, { onAction = HandleAction })
+        return
+
+    elseif actionType == "training_speedup_ad" then
+        -- 看广告加速训练CD（减少50%，最多3次）
+        if not SkillTrainingSystem.isTraining(gs) then
+            gs.addMessage("当前没有进行中的训练", "warning")
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            return
+        end
+        if gs.training.adSpeedUps >= 3 then
+            gs.addMessage("今次训练已达到最大加速次数(3次)", "warning")
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+            return
+        end
+        ---@diagnostic disable-next-line: undefined-global
+        sdk:ShowRewardVideoAd(function(result)
+            if result.success then
+                SkillTrainingSystem.speedUpWithAd(gs)
+                local remaining = SkillTrainingSystem.formatRemaining(gs.training and gs.training.remainSecs or 0)
+                gs.addMessage("广告加速成功！剩余：" .. remaining, "success")
+            else
+                gs.addMessage("广告未播放完毕", "warning")
+            end
+            UIManager.refresh(gs, config, { onAction = HandleAction })
+        end)
+        return
     end
 
     if success then
@@ -1623,6 +1971,32 @@ function ShowEndScreen()
         if old then old:Remove() end
         root:AddChild(overlay)
     end
+end
+
+-- ============================================================================
+-- 朋友圈 Overlay
+-- ============================================================================
+
+function ShowMomentsOverlay()
+    local root = UIManager.getRoot()
+    if not root then return end
+    local old = root:FindById("momentsOverlay")
+    if old then old:Remove() end
+    local overlay = BottomActions.buildMomentsOverlay(gs, config, config.Colors, { onAction = HandleAction })
+    root:AddChild(overlay)
+end
+
+-- ============================================================================
+-- 伙计候选人 Overlay
+-- ============================================================================
+
+function ShowHelperCandidatesOverlay()
+    local root = UIManager.getRoot()
+    if not root then return end
+    local old = root:FindById("helperCandidatesOverlay")
+    if old then old:Remove() end
+    local overlay = BottomActions.buildHelperCandidatesOverlay(gs, config, config.Colors, { onAction = HandleAction })
+    root:AddChild(overlay)
 end
 
 -- ============================================================================

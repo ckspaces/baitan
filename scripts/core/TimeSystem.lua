@@ -5,6 +5,7 @@
 local FinanceSystem = require("core.FinanceSystem")
 local StallSystem = require("core.StallSystem")
 local ProgressionSystem = require("core.ProgressionSystem")
+local HelperSystem = require("core.HelperSystem")
 
 local TimeSystem = {}
 
@@ -60,7 +61,24 @@ function TimeSystem.advanceDay(gs, config)
         end
     end
 
-    -- 9. 推进日期
+    -- 9. 竞争对手倒计时
+    if gs.activeCompetitor and gs.activeCompetitor.daysLeft > 0 then
+        gs.activeCompetitor.daysLeft = gs.activeCompetitor.daysLeft - 1
+        if gs.activeCompetitor.daysLeft <= 0 then
+            local name = (gs.activeCompetitor.emoji or "") .. (gs.activeCompetitor.name or "同行")
+            gs.activeCompetitor = nil
+            gs.addMessage(string.format("📢 %s 离开了，客流恢复正常！", name), "info")
+        end
+    end
+
+    -- 10. 伙计工资结算（每天扣除）
+    HelperSystem.deductSalary(gs, config)
+    -- 收摊后伙计自动停止值守
+    if not gs.isStalling and gs.helperActive then
+        gs.helperActive = false
+    end
+
+    -- 11. 推进日期
     gs.currentDay = gs.currentDay + 1
 
     if gs.currentDay > config.Game.DAYS_PER_MONTH then

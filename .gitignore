@@ -1,2 +1,14 @@
+# 构建产物
 .build/
 dist/
+
+# 临时文件
+.tmp/
+
+# 构建日志（不提交，体积大且无意义）
+logs/build/
+logs/*.log
+logs/*.pid
+
+# *.meta 文件（引擎自动生成，不需要跟踪）
+*.meta

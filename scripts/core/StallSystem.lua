@@ -1,10 +1,12 @@
 -- ============================================================================
--- StallSystem.lua - 经营系统（信任度 + 被动销售 + 完整交易流程）
--- 状态机：进货→出摊→（叫卖/等待观望）→收摊
+-- StallSystem.lua - 经营系统（信任度 + 自然客流 + 完整交易流程）
+-- 状态机：进货→出摊→（自然经营/随机事件）→收摊
 -- ============================================================================
 
 local PlayerSystem = require("core.PlayerSystem")
 local ProgressionSystem = require("core.ProgressionSystem")
+local ScaleSystem = require("core.ScaleSystem")
+local HelperSystem = require("core.HelperSystem")
 
 local StallSystem = {}
 
@@ -438,8 +440,17 @@ function StallSystem.calcIncomeModifiers(gs, config)
         promoPriceMod = promo.priceMod or 1.0
     end
 
+    -- 竞争对手抢客（降低客流）
+    local competitorMod = 1.0
+    if gs.activeCompetitor and (gs.activeCompetitor.daysLeft or 0) > 0 then
+        competitorMod = 1.0 - (gs.activeCompetitor.trafficSteal or 0.30)
+    end
+
+    -- 伙计效率（伙计值守时按其效率经营）
+    local helperMod = HelperSystem.applyHelperModifier(gs, config)
+
     return moodFactor * (1 + flyerBonus) * (1 + liveBonus)
-        * weatherMod * sickMod * locationPriceMod * promoPriceMod
+        * weatherMod * sickMod * locationPriceMod * promoPriceMod * competitorMod * helperMod
 end
 
 --- 获取当前激活的促销活动配置（返回 config 表或 nil，支持通用+地点促销）
@@ -464,7 +475,7 @@ function StallSystem.getActivePromotionConfig(gs, config)
     return nil
 end
 
---- 执行被动销售（供 hawkSell 和 waitObserve 内部调用）
+--- 执行被动销售（实时经营循环内部调用）
 --- 返回 passiveUnits, passiveIncome
 function StallSystem.doPassiveSales(gs, config, item, modifier)
     if gs.stallInventory <= 0 then return 0, 0 end
@@ -603,14 +614,31 @@ function StallSystem.openStall(gs, config)
         end
     end
 
-    if gs.cash < item.batchCost then
-        gs.addMessage(string.format("进货成本不足！需要 $%d", item.batchCost), "warning")
+    -- 计算规模加成后的实际进货成本与产量
+    local effYield = ScaleSystem.getEffectiveYield(gs, config, item)
+    local effCost  = ScaleSystem.getEffectiveCost(gs, config, item)
+
+    -- 报废率（技术技能降低损耗）
+    local wasteConfig = config.Waste
+    if wasteConfig then
+        local techLevel = gs.skills and gs.skills.tech and gs.skills.tech.level or 1
+        local wasteRate = math.max(wasteConfig.MIN_RATE,
+            wasteConfig.BASE_RATE - (techLevel - 1) * wasteConfig.REDUCE_PER_TECH_LV)
+        local wastedYield = math.max(0, math.floor(effYield * wasteRate))
+        if wastedYield > 0 then
+            effYield = effYield - wastedYield
+            gs.addMessage(wasteConfig.WASTE_MSG(wastedYield, wasteRate), "warning")
+        end
+    end
+
+    if gs.cash < effCost then
+        gs.addMessage(string.format("进货成本不足！需要 $%d", effCost), "warning")
         return false
     end
 
-    -- 扣进货成本
-    if item.batchCost > 0 then
-        addStallCash(gs, -item.batchCost, 'stock', '进货')
+    -- 扣进货成本（使用折扣后价格）
+    if effCost > 0 then
+        addStallCash(gs, -effCost, 'stock', '进货')
     end
     -- 扣鱼库存
     if item.requiresFish then
@@ -630,8 +658,11 @@ function StallSystem.openStall(gs, config)
     -- 进入摆摊状态
     gs.isStalling = true
     gs.stallItemIndex = gs.selectedStallItem
-    gs.stallInventory = item.yield
-    gs.stallInventoryMax = item.yield
+    gs.stallInventory = effYield
+    gs.stallInventoryMax = effYield
+    -- 记录本次规模参数（收摊时计算尾货回收需要用到）
+    gs.stallEffectiveCost  = effCost
+    gs.stallEffectiveYield = effYield
     gs.stallTotalSold = 0
     gs.stallTotalEarned = 0
     gs.stallPassiveSold = 0
@@ -658,8 +689,21 @@ function StallSystem.openStall(gs, config)
     local trustInfo = StallSystem.getTrustInfo(gs, config)
     local locName = loc and (loc.emoji .. loc.name) or ""
     local rentTag = rentCost > 0 and string.format("，摊位费$%d", rentCost) or ""
-    gs.addMessage(string.format("%s在%s进货 %s%s × %d份，花费$%d%s，开始营业！",
-        tierName, locName, item.emoji, item.name, item.yield, item.batchCost, rentTag), "info")
+    -- 构建规模加成提示（只在有加成时显示）
+    local scaleTag = ""
+    if effYield > item.yield or effCost < item.batchCost then
+        local parts = {}
+        if effYield > item.yield then
+            parts[#parts+1] = string.format("产量+%d", effYield - item.yield)
+        end
+        if effCost < item.batchCost then
+            local disc = math.floor((1 - effCost / item.batchCost) * 100)
+            parts[#parts+1] = string.format("成本-%d%%", disc)
+        end
+        scaleTag = "（" .. table.concat(parts, "，") .. "）"
+    end
+    gs.addMessage(string.format("%s在%s进货 %s%s × %d份，花费$%d%s%s，开始营业！",
+        tierName, locName, item.emoji, item.name, effYield, effCost, rentTag, scaleTag), "info")
     gs.addMessage(string.format("当前口碑: %s%s（信任度%d）",
         trustInfo.emoji, trustInfo.name, gs.stallTrust or 0), "info")
 
@@ -677,114 +721,7 @@ function StallSystem.openStall(gs, config)
     return true
 end
 
--- ============================================================================
--- 叫卖（主动推销 + 被动客流，消耗回合）
--- ============================================================================
----@param grillMultiplier number|nil 烤串小游戏倍率（默认1.0）
-function StallSystem.hawkSell(gs, config, grillMultiplier)
-    if not gs.isStalling then
-        gs.addMessage("还没出摊呢！", "warning")
-        return false
-    end
-    if gs.stallInventory <= 0 then
-        gs.addMessage("库存卖光了，该收摊啦！", "warning")
-        return false
-    end
 
-    local items = ProgressionSystem.getCurrentItems(gs, config)
-    local item = items[gs.stallItemIndex] or items[1]
-    if not item then
-        gs.addMessage("商品数据异常", "danger")
-        return false
-    end
-
-    local energyCostMult = 1.0
-    if gs.isSick and config.Health then
-        energyCostMult = config.Health.SICK_ENERGY_PENALTY or 1.5
-    end
-    local actualEnergyCost = math.floor(item.energyCost * energyCostMult)
-    if gs.energy < actualEnergyCost then
-        gs.addMessage("体力不足，先等客流自己过来，或者直接收摊休息。", "warning")
-        return false
-    end
-
-    gs.energy = math.max(0, gs.energy - actualEnergyCost)
-    gs.mood = math.max(0, gs.mood - item.moodCost)
-    gs.stallActionMode = 'hawk'
-    gs.stallActionModeUntil = (gs.timeOfDayMinutes or 0) + 30
-    gs.currentActivity = 'hawking'
-
-    local trustGain = math.random(config.Trust.HAWK_TRUST_GAIN[1], config.Trust.HAWK_TRUST_GAIN[2])
-    local locForTrust = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
-    if locForTrust then
-        trustGain = math.floor(trustGain * (locForTrust.trustGainMod or 1.0))
-    end
-    local promoForTrust = StallSystem.getActivePromotionConfig(gs, config)
-    if promoForTrust then
-        trustGain = trustGain + (promoForTrust.trustGainBonus or 0)
-    end
-    StallSystem.addTrust(gs, config, trustGain)
-
-    StallSystem.processProficiency(gs, config)
-    if config.Fame then
-        local fameGain = math.random(config.Fame.HAWK_FAME_GAIN[1], config.Fame.HAWK_FAME_GAIN[2])
-        if gs.isLiveStreaming then
-            fameGain = math.floor(fameGain * config.Fame.LIVESTREAM_FAME_MULT)
-        end
-        if fameGain > 0 then
-            StallSystem.addFame(gs, config, fameGain)
-        end
-    end
-
-    gs.addMessage('你开始主动叫卖，接下来半小时会进入冲刺拉客状态。', 'success')
-    gs.addMessage(string.format('这次叫卖重点是短时爆发，当前口碑额外+%d。', trustGain), 'info')
-    gs.addLog(string.format('切换为观望经营，口碑+%d', trustGain), 'sell')
-
-    PlayerSystem.addSkillXP(gs, 'negotiation', math.random(8, 20), config)
-    PlayerSystem.addSkillXP(gs, 'marketing', math.random(3, 10), config)
-    return true
-end
-
-function StallSystem.waitObserve(gs, config)
-    if not gs.isStalling then
-        gs.addMessage("还没出摊呢！", "warning")
-        return false
-    end
-    if gs.stallInventory <= 0 then
-        gs.addMessage("库存已经卖完了，可以直接收摊。", "warning")
-        return false
-    end
-
-    local energyCost = config.Trust.WAIT_ENERGY_COST
-    local moodCost = config.Trust.WAIT_MOOD_COST
-    if gs.energy < energyCost then
-        energyCost = gs.energy
-    end
-    gs.energy = math.max(0, gs.energy - energyCost)
-    gs.mood = math.max(0, gs.mood - moodCost)
-
-    local trustGain = math.random(config.Trust.WAIT_TRUST_GAIN[1], config.Trust.WAIT_TRUST_GAIN[2])
-    local locForTrust = gs.getCurrentLocation and gs.getCurrentLocation(config) or nil
-    if locForTrust then
-        trustGain = math.floor(trustGain * (locForTrust.trustGainMod or 1.0))
-    end
-    local promoForTrust = StallSystem.getActivePromotionConfig(gs, config)
-    if promoForTrust then
-        trustGain = trustGain + math.floor((promoForTrust.trustGainBonus or 0) * 0.5)
-    end
-    StallSystem.addTrust(gs, config, trustGain)
-
-    gs.stallActionMode = 'observe'
-    gs.stallActionModeUntil = (gs.timeOfDayMinutes or 0) + 45
-    gs.currentActivity = 'observing'
-
-    gs.addMessage('你选择了等待观望，摊位会继续自然经营，时间会自动流逝。', 'info')
-    gs.addMessage(string.format('这次主要目标是稳客流、养口碑，当前口碑额外+%d。', trustGain), 'info')
-    gs.addLog(string.format('切换为观望经营，口碑+%d', trustGain), 'sell')
-
-    PlayerSystem.addSkillXP(gs, 'negotiation', math.random(2, 6), config)
-    return true
-end
 
 function StallSystem.closeStall(gs, config)
     if not gs.isStalling then
@@ -802,9 +739,30 @@ function StallSystem.doCloseStall(gs, config)
     local item = items[gs.stallItemIndex]
     local itemName = item and (item.emoji .. item.name) or "商品"
 
+    -- 尾货回收：管理+技术技能越高，能回收更多剩余食材成本
+    local salvageAmount = 0
+    if leftover > 0 then
+        local salvageRate = ScaleSystem.getSalvageRate(gs, config)
+        local effCost  = gs.stallEffectiveCost  or (item and item.batchCost or 0)
+        local effYield = gs.stallEffectiveYield or (item and item.yield or 1)
+        salvageAmount = ScaleSystem.calcSalvageAmount(leftover, effCost, effYield, salvageRate)
+        if salvageAmount > 0 then
+            addStallCash(gs, salvageAmount, 'salvage', '尾货回收')
+        end
+    end
+
+    local leftoverMsg = ""
+    if leftover > 0 then
+        if salvageAmount > 0 then
+            local salvagePct = math.floor(ScaleSystem.getSalvageRate(gs, config) * 100)
+            leftoverMsg = string.format("（剩%d份，回收$%d，浪费率%.0f%%）", leftover, salvageAmount, 100 - salvagePct)
+        else
+            leftoverMsg = string.format("（剩余%d份全部浪费）", leftover)
+        end
+    end
+
     gs.addMessage(string.format("收摊！本次共卖%d份，赚$%s%s",
-        gs.stallTotalSold, gs.formatMoney(gs.stallTotalEarned),
-        leftover > 0 and string.format("（剩余%d份浪费了）", leftover) or ""), "info")
+        gs.stallTotalSold, gs.formatMoney(gs.stallTotalEarned), leftoverMsg), "info")
 
     -- 收摊时累计经营天数（一天出摊只算一次）
     gs.stallDayCount = gs.stallDayCount + 1
@@ -824,6 +782,8 @@ function StallSystem.doCloseStall(gs, config)
     gs.liveOrdersSold = 0
     gs.liveComments = {}
     gs.currentActivity = "idle"
+    gs.stallEffectiveCost  = nil
+    gs.stallEffectiveYield = nil
 end
 
 --- 开/关直播（不消耗回合）
@@ -1426,7 +1386,35 @@ function StallSystem.updateRealtime(gs, config, dt)
     gs.stallNaturalSold = math.max(0, units - gs.stallPassiveSold)
     gs.stallPassiveEarned = math.floor(income * (gs.stallPassiveSold / math.max(1, units)))
     gs.stallNaturalEarned = math.max(0, income - gs.stallPassiveEarned)
-    gs.stallTimeSlot = (gs.stallTimeSlot or 0) + 1  -- 保留字段兼容旧存档，不再作为限制依据
+    gs.stallTimeSlot = (gs.stallTimeSlot or 0) + 1
+
+    -- 顾客评价（卖出后随机触发）
+    local reviewConfig = config.CustomerReview
+    if reviewConfig and units > 0 and math.random() < reviewConfig.TRIGGER_CHANCE then
+        local trust = gs.stallTrust or 0
+        local goodProb = math.min(0.92, reviewConfig.GOOD_REVIEW_BASE + (trust / 10) * reviewConfig.TRUST_BONUS_PER_10)
+        local isGood = math.random() < goodProb
+        local texts = isGood and reviewConfig.GOOD_TEXTS or reviewConfig.BAD_TEXTS
+        local reviewText = texts[math.random(#texts)]
+        gs.recentReviews = gs.recentReviews or {}
+        table.insert(gs.recentReviews, 1, {
+            type = isGood and "good" or "bad",
+            text = reviewText,
+            time = gs.getTimeText and gs.getTimeText() or "",
+        })
+        if #gs.recentReviews > reviewConfig.MAX_REVIEWS_STORED then
+            table.remove(gs.recentReviews)
+        end
+        if isGood then
+            gs.goodReviews = (gs.goodReviews or 0) + 1
+            gs.stallTrust = math.floor(math.min(100, (gs.stallTrust or 0) + reviewConfig.GOOD_TRUST_GAIN))
+            gs.addLog(string.format('[评价] ⭐ %s', reviewText), 'review')
+        else
+            gs.badReviews = (gs.badReviews or 0) + 1
+            gs.stallTrust = math.ceil(math.max(0, (gs.stallTrust or 0) - reviewConfig.BAD_TRUST_LOSS))
+            gs.addLog(string.format('[评价] 👎 %s', reviewText), 'review')
+        end
+    end
     gs.equipmentWear = math.min(100, (gs.equipmentWear or 0) + (mode == 'hawk' and 2 or 1))
     if (gs.equipmentWear or 0) >= 100 then
         local repairCost = math.max(60, math.floor(item.batchCost * 0.4))
@@ -1467,6 +1455,54 @@ function StallSystem.updateRealtime(gs, config, dt)
         return true
     end
 
+    return true
+end
+
+--- 摊中补货（需要管理技能 Lv5+，花费进货成本的60%补充50%库存）
+function StallSystem.restockMidStall(gs, config)
+    if not gs.isStalling then
+        gs.addMessage("不在摆摊中，无法补货！", "warning")
+        return false
+    end
+    local mgmtLevel = gs.skills and gs.skills.management and gs.skills.management.level or 1
+    if mgmtLevel < 5 then
+        gs.addMessage("需要管理技能 Lv5 才能边卖边补货！（当前 Lv" .. mgmtLevel .. "）", "warning")
+        return false
+    end
+    local items = ProgressionSystem.getCurrentItems(gs, config)
+    local item = items[gs.stallItemIndex] or items[1]
+    if not item then
+        gs.addMessage("找不到当前商品！", "warning")
+        return false
+    end
+    local effYield = ScaleSystem.getEffectiveYield(gs, config, item)
+    local effCost  = ScaleSystem.getEffectiveCost(gs, config, item)
+    local addedYield = math.floor(effYield * 0.5)  -- 补充50%产量
+
+    -- 应用报废率
+    local wasteConfig = config.Waste
+    if wasteConfig then
+        local techLevel = gs.skills and gs.skills.tech and gs.skills.tech.level or 1
+        local wasteRate = math.max(wasteConfig.MIN_RATE,
+            wasteConfig.BASE_RATE - (techLevel - 1) * wasteConfig.REDUCE_PER_TECH_LV)
+        local wasted = math.max(0, math.floor(addedYield * wasteRate))
+        if wasted > 0 then
+            addedYield = addedYield - wasted
+        end
+    end
+
+    local restockCost = math.floor(effCost * 0.6)  -- 补货享受60%成本折扣
+    if gs.cash < restockCost then
+        gs.addMessage(string.format("补货资金不足，需要 $%d（当前 $%d）", restockCost, gs.cash), "warning")
+        return false
+    end
+
+    addStallCash(gs, -restockCost, 'stock', '摊中补货')
+    gs.stallInventory = gs.stallInventory + addedYield
+    gs.stallInventoryMax = (gs.stallInventoryMax or 0) + addedYield
+    gs.addMessage(string.format(
+        "✅ 补货成功！追加 %d 份 %s%s，花费 $%d",
+        addedYield, item.emoji, item.name, restockCost), "success")
     return true
 end
 
