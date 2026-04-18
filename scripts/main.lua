@@ -71,10 +71,29 @@ function Start()
     -- 3. 根据运行模式分支
     if IsNetworkMode and IsNetworkMode() then
         -- ── 网络/常驻服务器模式 ──────────────────────────────────
-        -- 服务器发来 SaveDataLoad 时再真正初始化游戏
+        -- 1. 注册所有远程事件（必须！否则引擎静默丢弃）
+        network:RegisterRemoteEvent("ClientReady")
+        network:RegisterRemoteEvent("SaveDataLoad")
+        network:RegisterRemoteEvent("SaveDataUpdate")
+
+        -- 2. 创建最小化场景（网络连接必需）
+        local netScene = Scene()
+        netScene:CreateComponent("Octree", LOCAL)
+
+        -- 3. 绑定场景到服务器连接，并发送 ClientReady 信号
+        local serverConn = network:GetServerConnection()
+        if serverConn then
+            serverConn.scene = netScene
+            serverConn:SendRemoteEvent("ClientReady", true)
+            print("=== 摆摊大亨 已发送 ClientReady，等待服务器发送存档 ===")
+        else
+            print("=== 摆摊大亨 WARNING: 无法获取 serverConnection ===")
+        end
+
+        -- 4. 订阅服务器发来的存档事件
         SubscribeToEvent("SaveDataLoad",         "HandleSaveDataLoad")
         SubscribeToEvent("ServerDisconnected",   "HandleServerDisconnected")
-        -- 显示等待界面
+        -- 5. 显示等待界面
         ShowNetworkLoadingScreen()
         print("=== 摆摊大亨 客户端启动（网络模式，等待云端存档） ===")
     else
@@ -149,8 +168,9 @@ function HandleSaveDataLoad(eventType, eventData)
     local hasData  = eventData["has_save"]:GetBool()
 
     -- 注入服务器连接（用于后续 SaveSystem.save() 上传）
-    if network and network.serverConnection then
-        SaveSystem.setServerConnection(network.serverConnection)
+    local serverConn = network:GetServerConnection()
+    if serverConn then
+        SaveSystem.setServerConnection(serverConn)
     end
 
     -- 加载游戏状态

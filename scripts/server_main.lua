@@ -18,6 +18,11 @@ local connections = {}
 function Start()
     print("[Server] 摆摊大亨 常驻服务器启动")
 
+    -- 注册所有远程事件（必须！否则引擎静默丢弃）
+    network:RegisterRemoteEvent("ClientReady")
+    network:RegisterRemoteEvent("SaveDataLoad")
+    network:RegisterRemoteEvent("SaveDataUpdate")
+
     SubscribeToEvent("ClientConnected",    "HandleClientConnected")
     SubscribeToEvent("ClientDisconnected", "HandleClientDisconnected")
     SubscribeToEvent("ClientReady",        "HandleClientReady")
@@ -50,18 +55,24 @@ end
 -- ClientReady 时：读取存档并发给客户端，同时注册存档更新监听
 function HandleClientReady(eventType, eventData)
     local conn = eventData["Connection"]:GetPtr("Connection")
-    local uid  = conn.identity["user_id"]:GetInt64()
+    local uidVariant = conn.identity["user_id"]
+    local uid = uidVariant and uidVariant:GetInt64() or 10001  -- dev 模式回退
     connections[uid] = conn
 
     print(string.format("[Server] 玩家 %s 就绪，正在加载存档...", tostring(uid)))
 
-    -- 订阅该玩家发来的存档更新
-    SubscribeToEvent(conn, "SaveDataUpdate", "HandleSaveDataUpdate")
+    -- 订阅存档更新（全局订阅，远程事件通过 eventData["Connection"] 区分玩家）
+    SubscribeToEvent("SaveDataUpdate", "HandleSaveDataUpdate")
 
     -- 从 serverCloud 加载存档
     serverCloud:Get(uid, SAVE_KEY, {
         ok = function(scores, iscores, sscores)
-            local saveJson = sscores and sscores[SAVE_KEY]
+            -- serverCloud:Set() 写入 scores bucket，从 scores 读取
+            local saveJson = scores and scores[SAVE_KEY]
+            -- 兼容旧的 sscores bucket（历史数据）
+            if not saveJson or saveJson == "" then
+                saveJson = sscores and sscores[SAVE_KEY]
+            end
             local hasData  = saveJson ~= nil and saveJson ~= ""
 
             local payload = VariantMap()
